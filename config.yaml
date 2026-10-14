@@ -76,4 +76,42 @@ tools:
     - "python.org"
     - "stackoverflow.com"
 
+# =============================================================================
+# Voice settings (Step 4)
+# =============================================================================
+voice:
+  # Push-to-talk hotkey (hold to record, release to transcribe)
+  hotkey: "F9"
+  # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
+  kill_hotkey: "ctrl+alt+k"
+
+  # Speech-to-Text (STT)
+  stt:
+    # NOTE: "whisper-large-v3-turbo" is a placeholder model name to be verified by user
+    groq_model: "whisper-large-v3-turbo"
+    # Local fallback model when Groq fails or is on cooldown
+    local_model: "small"
+    # Minimum audio duration (seconds) — taps under this are ignored
+    min_duration: 0.3
+    # Maximum recording duration (seconds)
+    max_duration: 30.0
+    # Confidence thresholds
+    min_avg_logprob: -1.0
+    max_no_speech_prob: 0.6
+    timeouts:
+      groq: 10
+      local: 30
+
+  # Text-to-Speech (TTS)
+  tts:
+    # NOTE: "en-US-GuyNeural" is a placeholder Edge voice to be verified by user
+    edge_voice: "en-US-GuyNeural"
+    edge_rate: "+0%"
+    backup_engine: "pyttsx3"
+
+  # Safety & confirmations
+  safety:
+    confirmation_timeout: 10.0
+    privacy_notice: "Audio may be sent to Groq for speech recognition."
+
 
