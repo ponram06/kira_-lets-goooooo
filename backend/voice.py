@@ -37,10 +37,13 @@ import io
 import logging
 import os
 import re
+import threading
 import time
 import wave
 from typing import Any, Callable, Optional
 
+import edge_tts
+import miniaudio
 import numpy as np
 from openai import (
     APIConnectionError,
@@ -51,6 +54,9 @@ from openai import (
     PermissionDeniedError,
     RateLimitError,
 )
+import sounddevice as sd
+
+from backend.policy import KILL_SWITCH
 
 logger = logging.getLogger(__name__)
 
@@ -439,3 +445,192 @@ class STTEngine:
             result.hallucination = True
 
         return result
+
+
+class TTSEngine:
+    """
+    Text-to-Speech engine implementing:
+    1. Edge TTS with in-memory MP3 decoding via miniaudio (pure C, no ffmpeg)
+    2. pyttsx3 fallback running in a dedicated thread with a fresh engine per call
+    3. Sentence-level synthesis/playback pipelining (synthesizes sentence N+1 while playing sentence N)
+    4. Instantaneous interruption on kill-switch, 'stop' word, or hotkey press
+    5. Clean spoken text filtering (replaces code blocks, URLs, markdown syntax)
+    """
+
+    def __init__(self, config: dict) -> None:
+        self.config = config
+        tts_cfg = config.get("voice", {}).get("tts", {})
+        self.edge_voice = tts_cfg.get("edge_voice", "en-US-GuyNeural")
+        self.edge_rate = tts_cfg.get("edge_rate", "+0%")
+        self.backup_engine = tts_cfg.get("backup_engine", "pyttsx3")
+
+        self._interrupted = threading.Event()
+        self._current_pyttsx3_stop = threading.Event()
+
+    def stop(self) -> None:
+        """Immediately halt all audio synthesis and playback."""
+        self._interrupted.set()
+        self._current_pyttsx3_stop.set()
+        try:
+            sd.stop()
+        except Exception as exc:
+            logger.debug("sounddevice.stop error: %s", exc)
+
+    def is_interrupted(self) -> bool:
+        return self._interrupted.is_set() or KILL_SWITCH.is_stopped()
+
+    async def synthesize_sentence_edge(self, sentence: str) -> Optional[tuple[np.ndarray, int]]:
+        """
+        Synthesize a single sentence via Edge TTS and decode MP3 directly to raw PCM
+        using miniaudio in memory. Returns (pcm_samples, sample_rate) or None on failure.
+        """
+        if self.is_interrupted() or not sentence.strip():
+            return None
+
+        try:
+            communicate = edge_tts.Communicate(sentence, voice=self.edge_voice, rate=self.edge_rate)
+            chunks: list[bytes] = []
+            async for chunk in communicate.stream():
+                if self.is_interrupted():
+                    return None
+                if chunk["type"] == "audio":
+                    chunks.append(chunk["data"])
+
+            if not chunks:
+                return None
+
+            mp3_bytes = b"".join(chunks)
+            decoded = miniaudio.mp3_read_s16(mp3_bytes)
+            samples = np.frombuffer(decoded.samples, dtype=np.int16)
+            return (samples, decoded.sample_rate)
+
+        except Exception as exc:
+            logger.warning("Edge TTS synthesis failed for '%s': %s", sentence[:30], exc)
+            return None
+
+    def _speak_pyttsx3_sync(self, sentence: str, stop_event: threading.Event) -> None:
+        """
+        Run pyttsx3 with a fresh engine per call inside a worker thread.
+        Uses on_word callback for sub-second interrupt response.
+        """
+        if self.is_interrupted() or not sentence.strip():
+            return
+
+        try:
+            import pyttsx3
+            import pythoncom
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+
+            def on_word(name: Any, location: Any, length: Any) -> None:
+                if stop_event.is_set() or self.is_interrupted():
+                    engine.stop()
+
+            try:
+                engine.connect("word", on_word)
+            except Exception:
+                pass
+
+            engine.say(sentence)
+            engine.runAndWait()
+        except Exception as exc:
+            logger.warning("pyttsx3 speech failed: %s", exc)
+        finally:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
+    async def play_pcm(self, samples: np.ndarray, sample_rate: int) -> None:
+        """Play PCM audio through sounddevice with quick interrupt polling."""
+        if self.is_interrupted() or len(samples) == 0:
+            return
+
+        try:
+            sd.play(samples, samplerate=sample_rate)
+            while sd.get_stream() and sd.get_stream().active:
+                if self.is_interrupted():
+                    sd.stop()
+                    break
+                await asyncio.sleep(0.04)
+        except sd.PortAudioError as exc:
+            logger.warning("Sound output device unavailable (PortAudioError): %s", exc)
+        except Exception as exc:
+            logger.warning("Playback error: %s", exc)
+
+    async def speak(self, text: str, speech_end_time: Optional[float] = None) -> None:
+        """
+        Speak the provided text using sentence-pipelined synthesis:
+        Sentence N+1 is synthesized in the background while sentence N is playing.
+        If Edge TTS fails, falls back to pyttsx3.
+        """
+        self._interrupted.clear()
+        self._current_pyttsx3_stop.clear()
+
+        cleaned = clean_spoken_text(text)
+        if not cleaned:
+            return
+
+        sentences = split_into_sentences(cleaned)
+        if not sentences:
+            return
+
+        first_word_spoken = False
+        loop = asyncio.get_running_loop()
+
+        # Try Edge TTS pipeline first
+        edge_failed = False
+        synth_task: Optional[asyncio.Task] = asyncio.create_task(self.synthesize_sentence_edge(sentences[0]))
+
+        for i, sentence in enumerate(sentences):
+            if self.is_interrupted():
+                if synth_task and not synth_task.done():
+                    synth_task.cancel()
+                break
+
+            current_audio = None
+            if not edge_failed and synth_task:
+                try:
+                    current_audio = await synth_task
+                except Exception:
+                    current_audio = None
+
+            # If Edge failed on this sentence, fallback to pyttsx3
+            if current_audio is None and not self.is_interrupted():
+                edge_failed = True
+
+            if edge_failed:
+                # Use pyttsx3 fallback
+                if not first_word_spoken and speech_end_time is not None:
+                    latency = time.monotonic() - speech_end_time
+                    print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
+                    first_word_spoken = True
+
+                await loop.run_in_executor(
+                    None,
+                    self._speak_pyttsx3_sync,
+                    sentence,
+                    self._current_pyttsx3_stop,
+                )
+            else:
+                # Edge TTS succeeded: kick off synthesis for the next sentence concurrently
+                next_task: Optional[asyncio.Task] = None
+                if i + 1 < len(sentences) and not self.is_interrupted():
+                    next_task = asyncio.create_task(self.synthesize_sentence_edge(sentences[i + 1]))
+
+                if not first_word_spoken and speech_end_time is not None:
+                    latency = time.monotonic() - speech_end_time
+                    print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
+                    first_word_spoken = True
+
+                if current_audio:
+                    pcm_data, sr = current_audio
+                    await self.play_pcm(pcm_data, sr)
+
+                synth_task = next_task
