@@ -104,6 +104,11 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    "open_website": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
     "create_folder": {
         "risk": RiskLevel.LOW, "allowlisted": True,
         "affects_people": False, "outside_workspace": False,
@@ -377,6 +382,7 @@ class ModeManager:
 def resolve_path(path: "str | Path") -> Path:
     """
     Resolve *path* and verify it lies within ``WORKSPACE_ROOT``.
+    Relative paths are resolved relative to ``WORKSPACE_ROOT``.
 
     Raises ``PolicyError`` if the resolved path escapes the workspace.
     Handles: ``..`` traversal, absolute paths on other drives, mixed
@@ -386,10 +392,14 @@ def resolve_path(path: "str | Path") -> Path:
     Limitation: short 8.3 names (WORKSP~1) may not be expanded on all
     Windows filesystem configurations.
     """
-    workspace: Path = WORKSPACE_ROOT  # already .resolve()d at module load
+    workspace: Path = WORKSPACE_ROOT  # dynamically uses active WORKSPACE_ROOT
 
     try:
-        resolved: Path = Path(path).resolve()
+        p = Path(path)
+        if not p.is_absolute():
+            resolved: Path = (workspace / p).resolve()
+        else:
+            resolved = p.resolve()
     except (OSError, ValueError) as exc:
         raise PolicyError(f"Invalid path: {exc}") from exc
 

@@ -53,3 +53,27 @@ mode:
   # Seconds before Free mode auto-reverts to Restricted (default 10 minutes)
   free_revert_timeout: 600
 
+# =============================================================================
+# Tool allow-lists
+# =============================================================================
+tools:
+  allowed_commands:
+    - "python"
+    - "py"
+    - "pytest"
+    - "dir"
+    - "echo"
+    - "type"
+  allowed_apps:
+    - "code"
+    - "notepad"
+    - "calc"
+    - "cmd"
+    - "explorer"
+  allowed_websites:
+    - "github.com"
+    - "google.com"
+    - "python.org"
+    - "stackoverflow.com"
+
+

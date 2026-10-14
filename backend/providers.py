@@ -19,7 +19,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 from dotenv import load_dotenv
@@ -117,10 +117,12 @@ class ProviderManager:
         self,
         messages: list[dict],
         tools: Optional[list] = None,
-    ) -> tuple[str, Optional[str]]:
+        return_raw: bool = False,
+    ) -> tuple[Any, Optional[str]]:
         """
         Send *messages* to the first available provider and return
-        ``(reply_text, provider_name)``.
+        ``(reply_text, provider_name)`` or ``(message_obj, provider_name)``
+        when ``return_raw=True``.
 
         If every provider is unavailable, returns a human-readable error
         string with ``None`` as the provider name.
@@ -131,6 +133,8 @@ class ProviderManager:
             OpenAI-style message list (role / content dicts).
         tools:
             Optional list of tool schemas (passed through unchanged).
+        return_raw:
+            If True, return the full Choice message object (for tool_calls inspection).
         """
         for provider in self._providers:
             name: str = provider["name"]
@@ -145,9 +149,12 @@ class ProviderManager:
                     kwargs["tools"] = tools
 
                 response = await provider["client"].chat.completions.create(**kwargs)
-                content: str = response.choices[0].message.content or ""
+                message = response.choices[0].message
+                content: str = message.content or ""
                 # Log only length — never the content itself
                 logger.info("Provider '%s' replied (%d chars).", name, len(content))
+                if return_raw:
+                    return message, name
                 return content, name
 
             except RateLimitError as exc:
