@@ -18,3 +18,4 @@ def speak(text: str) -> str:
     """
     print(f"\n[Kira speaking]: {text}\n")
     return f"Spoke: {text}"
+

@@ -22,6 +22,9 @@ build/
 .coverage
 htmlcov/
 
+# Action logs
+logs/
+
 # Workspace contents (keep the folder, ignore what's inside)
 workspace/*
 !workspace/.gitkeep

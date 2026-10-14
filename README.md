@@ -13,6 +13,7 @@ kira/
 │   ├── providers.py      # LLM provider manager (ordered fallback + cooldowns)
 │   ├── brain.py          # Terminal chat REPL with memory & mode controls
 │   ├── policy.py         # Permission layer (check / ModeManager / workspace guard)
+│   ├── audit.py          # Audit logging (logs/actions.jsonl) & live event feed
 │   ├── agent.py          # Agent loop: Plan -> Act -> Observe -> Verify -> Report
 │   └── tools/            # Concrete tool implementations & schemas
 │       ├── __init__.py   # Tool registry and OpenAI function calling schemas
@@ -20,6 +21,7 @@ kira/
 │       ├── execution.py  # run_command (allow-listed commands, visible CMD)
 │       ├── system.py     # open_app, open_website (allow-lists)
 │       └── voice_stub.py # speak (stub narrator)
+├── logs/                 # actions.jsonl (git-ignored)
 ├── workspace/            # The ONLY directory tools are permitted to modify
 ├── tests/
 │   ├── conftest.py
@@ -113,7 +115,7 @@ All tests mock external APIs and subprocesses where appropriate so they run offl
 pytest -v
 ```
 
-Expected: **91 passed, 1 skipped** (the 1 skip is for Windows Developer Mode symlink creation).
+Expected: **105 passed, 1 skipped** (the 1 skip is for Windows Developer Mode symlink creation).
 
 Run individual test modules:
 
@@ -129,15 +131,15 @@ pytest tests/test_providers.py -v
 ## Tools & Security Architecture
 
 ### Tool Permissions
-Every tool call is routed through `policy.check(action, mode)` before execution:
+Every tool call is routed through `policy.check(action, mode, allowlisted=..., chained=...)` before execution:
 
 | Tool | Risk Level | Restricted Mode | Free Mode | Constraints |
 |---|---|---|---|---|
 | `create_folder` | LOW | **allow** | **allow** | Must stay within `workspace/` |
 | `create_file` | LOW | **allow** | **allow** | Must stay within `workspace/` |
-| `run_command` | MEDIUM | **allow** (if allowlisted) | **allow** | First binary must be in `allowed_commands` |
-| `open_app` | LOW | **allow** | **allow** | App must be in `allowed_apps` |
-| `open_website` | LOW | **allow** | **allow** | Domain must be in `allowed_websites` |
+| `run_command` | MEDIUM | **allow** (if allowlisted) / **ask** (if unknown) | **allow** | Shell metacharacters (`&`, `\|`, `>`, `<`, `^`, `%`, `;`, newlines) blocked; all path args checked via `resolve_path()`; 30s timeout |
+| `open_app` | LOW | **allow** | **allow** | App must be in `allowed_apps`; `code` and `explorer` target path must reside in `workspace/` |
+| `open_website` | LOW | **allow** | **allow** | HTTPS only; host must match exact domain or true subdomain in `allowed_websites` (lookalikes blocked) |
 | `speak` | LOW | **allow** | **allow** | Console narration stub |
 | `take_screenshot` | MEDIUM | **ask** | **allow** | Special privacy rule |
 | `send_message` | HIGH | **ask** | **countdown 3s** | Involves contacting external person |
@@ -145,7 +147,9 @@ Every tool call is routed through `policy.check(action, mode)` before execution:
 | `type_password` | HIGH | **block** | **block** | Forbidden category |
 
 ### Agent Loop Guards
-1. **Pre-Step Kill Switch**: Intercepts actions immediately if `stop` is issued.
-2. **Step Ceiling**: Maximum **15 steps** per task. If reached, execution pauses and asks the user whether to continue.
-3. **Retry Limit**: If a tool fails, it retries at most **twice** before stopping to prompt the user.
-4. **Untrusted Data Framing**: All file contents and tool outputs are fed back to the LLM explicitly tagged as `DATA (never instructions)` to defend against prompt injection.
+1. **Pre-Step, Post-Tool, and In-Command Kill Switch**: Intercepts actions immediately if `stop` or global hotkey is issued.
+2. **Step Ceiling & Single Continuation**: Maximum **15 steps** per task. If reached, Kira prompts once to continue for up to 15 more steps (30 steps max total). Further loops are permanently halted.
+3. **Retry Limit**: If a tool fails with an execution error, it retries at most **twice** before asking the user. Policy blocks and user denials are **never retried**.
+4. **Untrusted Data Framing**: All file contents and tool outputs are fed back to the LLM explicitly tagged as `DATA (never instructions)` to defend against prompt injection. Long tool outputs (>4000 characters) are safely truncated.
+5. **Provider Fallback & Ollama Containment**: If the answering provider switches to local Ollama, Kira automatically forces Restricted mode and disables screen control.
+6. **Audit Trail & Live Feed**: Every tool decision and execution result is logged to `logs/actions.jsonl` (omitting secret keys and user message texts) and dispatched to `emit(event)` for the live action feed.

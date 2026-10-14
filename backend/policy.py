@@ -416,36 +416,30 @@ def resolve_path(path: "str | Path") -> Path:
 # ---------------------------------------------------------------------------
 # Main policy check
 # ---------------------------------------------------------------------------
-def check(action: str, mode: Mode) -> str:
+def check(
+    action: str,
+    mode: Mode,
+    allowlisted: Optional[bool] = None,
+    chained: bool = False,
+) -> str:
     """
     Determine whether *action* is permitted in *mode*.
 
-    Returns
-    -------
-    ``"allow"``
-        Proceed immediately — no prompt needed.
-    ``"ask"``
-        Pause and ask the user for explicit confirmation.
-    ``"countdown"``
-        Show a 3-second cancellable countdown, then proceed (Free mode only,
-        for actions that affect other people).
-    ``"block"``
-        Refuse.  Explain the reason to the user.
-
-    Decision table (in priority order)
-    -----------------------------------
-    1. Kill switch set               → block (always)
-    2. Forbidden category            → block (always)
-    3. outside_workspace=True        → block (Restricted) / ask (Free)
-    4. LOW risk                      → allow (any mode)
-    5. MEDIUM + screenshot           → ask (Restricted) / allow (Free)
-    6. MEDIUM + allowlisted          → allow (any mode, inside workspace)
-    7. MEDIUM otherwise              → ask
-    8. HIGH (Restricted)             → ask  ← never allow, never block
-    9. HIGH + affects_people (Free)  → countdown
-    10. HIGH (Free)                  → ask
-    11. Unknown action               → block (Restricted) / ask (Free)
+    Parameters
+    ----------
+    action:
+        Tool name from TOOL_REGISTRY.
+    mode:
+        Current permission mode (RESTRICTED or FREE).
+    allowlisted:
+        Optional override for commands/apps: True if on allow-list, False if unknown.
+    chained:
+        If True (e.g. command contains shell metacharacters like & or |), immediately blocks.
     """
+    # 0. Chained shell commands are always blocked
+    if chained:
+        return "block"
+
     # 1. Kill switch
     if KILL_SWITCH.is_stopped():
         return "block"
@@ -461,7 +455,8 @@ def check(action: str, mode: Mode) -> str:
         return "block"
 
     risk: RiskLevel = entry["risk"]
-    allowlisted: bool = entry.get("allowlisted", False)
+    if allowlisted is None:
+        allowlisted = entry.get("allowlisted", False)
     affects_people: bool = entry.get("affects_people", False)
     outside_workspace: bool = entry.get("outside_workspace", False)
 

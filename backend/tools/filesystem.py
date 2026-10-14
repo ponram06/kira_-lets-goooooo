@@ -42,3 +42,4 @@ def create_file(path: str, content: str = "") -> str:
     with open(resolved, "w", encoding="utf-8") as f:
         f.write(content)
     return f"File created successfully at '{path}' ({len(content)} chars)"
+

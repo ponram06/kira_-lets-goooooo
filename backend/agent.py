@@ -3,17 +3,22 @@ agent.py
 ========
 Agent loop for Kira: Plan -> Act -> Observe -> Verify -> Report.
 
-Rules enforced
+Guards & Rules
 --------------
-- Maximum 15 steps per task, then pauses and asks the user.
-- Retry a failed step at most twice before asking the user.
-- Kill switch is checked before every step.
-- Every tool call passes policy.check(action, mode) before running:
-    - 'allow': runs immediately.
-    - 'ask': prompts user for confirmation.
-    - 'countdown': 3-second cancellable wait (Free mode).
-    - 'block': blocks action and informs model why.
-- Tool outputs and file contents are wrapped as DATA, never instructions.
+- Maximum 15 steps per task; allows only ONE user continuation (max 30 steps total).
+- Retries apply strictly to execution errors (at most twice), never to policy blocks or user denials.
+- Kill switch is checked:
+    1. before each step
+    2. inside run_command
+    3. after each tool call
+- Every tool call passes policy.check(action, mode, allowlisted=..., chained=...):
+    - allowlisted commands run immediately ('allow')
+    - unknown commands trigger user confirmation ('ask')
+    - chained/metacharacter commands are immediately rejected ('block')
+- Truncates long tool outputs.
+- Logs all tool actions to logs/actions.jsonl and emits live feed events.
+- Tool outputs wrapped as untrusted DATA, never instructions.
+- If provider switches to Ollama, forces Restricted mode and notifies user.
 """
 
 from __future__ import annotations
@@ -23,11 +28,15 @@ import logging
 import time
 from typing import Any, Callable, Optional
 
-from backend.policy import KILL_SWITCH, ModeManager, check
+from backend.audit import log_action
+from backend.policy import KILL_SWITCH, Mode, ModeManager, check
 from backend.providers import ProviderManager
 from backend.tools import KIRA_TOOLS_SCHEMA, TOOL_FUNCTIONS
+from backend.tools.execution import inspect_command
 
 logger = logging.getLogger(__name__)
+
+MAX_OUTPUT_CHARS = 4000
 
 
 def _terminal_confirm(prompt_text: str) -> bool:
@@ -70,6 +79,7 @@ class AgentRunner:
         ``(final_report, answering_provider)``
         """
         step = 0
+        has_continued = False
         current_messages = list(messages)
         last_provider: Optional[str] = None
 
@@ -79,16 +89,20 @@ class AgentRunner:
                 logger.warning("Agent loop stopped: Kill switch is active.")
                 return "Task halted: Kill switch was activated.", last_provider
 
-            # 2. Maximum step limit check
+            # 2. Maximum step limit check (allow only one continue)
             if step >= self.max_steps:
-                logger.info("Reached maximum step limit (%d).", self.max_steps)
-                cont = self.confirm_callback(
-                    f"Reached {self.max_steps} steps. Would you like to continue for 5 more steps? (yes/no):"
-                )
-                if cont:
-                    self.max_steps += 5
+                logger.info("Reached step limit (%d).", self.max_steps)
+                if not has_continued:
+                    cont = self.confirm_callback(
+                        f"Reached {self.max_steps} steps. Would you like to continue for up to 15 more steps? (yes/no):"
+                    )
+                    if cont:
+                        has_continued = True
+                        self.max_steps += 15
+                    else:
+                        return f"Task stopped after reaching step limit ({self.max_steps} steps).", last_provider
                 else:
-                    return f"Task stopped after reaching step limit ({self.max_steps} steps).", last_provider
+                    return f"Task stopped: Maximum continuation limit reached ({self.max_steps} steps).", last_provider
 
             step += 1
             logger.info("Agent step %d/%d", step, self.max_steps)
@@ -101,11 +115,15 @@ class AgentRunner:
             )
             last_provider = provider
 
-            # Lock to Restricted if Ollama was the answering provider
-            self.mode_manager.notify_provider(provider)
+            # Provider transition handling: Ollama auto-restriction
+            if provider and provider.lower() == "ollama":
+                was_free = self.mode_manager.mode == Mode.FREE
+                self.mode_manager.notify_provider("ollama")
+                if was_free:
+                    print("\n[Kira notice]: Switched to Restricted mode (local Ollama answering). "
+                          "Tool use may be unreliable on the local model.\n")
 
             if response_msg is None or provider is None:
-                # All providers unavailable
                 err_text = response_msg if isinstance(response_msg, str) else "All providers unavailable."
                 return err_text, None
 
@@ -135,7 +153,7 @@ class AgentRunner:
 
             # 6. Execute each tool call through policy.check()
             for tc in tool_calls:
-                # Pre-tool kill switch check
+                # Kill switch check before each tool call
                 if KILL_SWITCH.is_stopped():
                     return "Task halted: Kill switch was activated.", last_provider
 
@@ -148,16 +166,36 @@ class AgentRunner:
                     fn_args = {}
                     logger.warning("Failed to parse tool arguments: %s", exc)
 
-                # Policy gate
-                decision = check(fn_name, self.mode_manager.mode)
-                logger.info("Policy check for '%s' in %s mode: %s", fn_name, self.mode_manager.mode.value, decision)
+                # Command inspection for allowlisted and chaining flags
+                allowlisted_flag: Optional[bool] = None
+                chained_flag: bool = False
 
-                # Branch on policy decision
+                if fn_name == "run_command":
+                    cmd_str = fn_args.get("command", "")
+                    chained_flag, allowlisted_flag, _ = inspect_command(cmd_str)
+
+                # Policy gate
+                decision = check(
+                    fn_name,
+                    self.mode_manager.mode,
+                    allowlisted=allowlisted_flag,
+                    chained=chained_flag,
+                )
+                logger.info(
+                    "Policy check for '%s' in %s mode (allowlisted=%s, chained=%s): %s",
+                    fn_name,
+                    self.mode_manager.mode.value,
+                    allowlisted_flag,
+                    chained_flag,
+                    decision,
+                )
+
+                # Branch on policy decision (no retries for block or user denial)
                 if decision == "block":
                     observation = (
                         f"ERROR: Action '{fn_name}' was BLOCKED by safety policy. "
                         f"Current mode: {self.mode_manager.mode.value}. "
-                        "Do not attempt this action again."
+                        + ("Shell metacharacters/chaining blocked." if chained_flag else "Do not attempt this action again.")
                     )
                 elif decision == "ask":
                     approved = self.confirm_callback(
@@ -169,7 +207,6 @@ class AgentRunner:
                     else:
                         observation = self._execute_tool_with_retries(fn_name, fn_args)
                 elif decision == "countdown":
-                    # Free mode 3-second cancellable countdown
                     print(f"\n[Free Mode Countdown] Executing '{fn_name}' in 3 seconds... Press Ctrl+C or Stop to cancel.")
                     cancelled = False
                     for _ in range(3):
@@ -186,7 +223,18 @@ class AgentRunner:
                 else:
                     observation = f"ERROR: Unknown policy decision '{decision}'."
 
-                # Append tool result as untrusted DATA, never instructions
+                # Log to actions.jsonl and emit event
+                log_action(fn_name, fn_args, decision, observation)
+
+                # Kill switch check immediately after tool call
+                if KILL_SWITCH.is_stopped():
+                    return "Task halted: Kill switch was activated.", last_provider
+
+                # Truncate long tool outputs
+                if len(observation) > MAX_OUTPUT_CHARS:
+                    observation = observation[:MAX_OUTPUT_CHARS] + "\n[... output truncated by Kira ...]"
+
+                # Append tool message with tool_call_id, framed strictly as untrusted DATA
                 current_messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
@@ -195,7 +243,8 @@ class AgentRunner:
 
     def _execute_tool_with_retries(self, fn_name: str, fn_args: dict) -> str:
         """
-        Execute tool function with up to max_retries attempts on failure.
+        Execute tool function. Retries apply strictly to execution errors,
+        at most twice before asking user.
         """
         fn = TOOL_FUNCTIONS.get(fn_name)
         if not fn:
