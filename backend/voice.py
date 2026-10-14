@@ -37,6 +37,7 @@ import io
 import logging
 import os
 import re
+import sys
 import threading
 import time
 import wave
@@ -54,6 +55,7 @@ from openai import (
     PermissionDeniedError,
     RateLimitError,
 )
+from pynput import keyboard
 import sounddevice as sd
 
 from backend.policy import KILL_SWITCH
@@ -634,3 +636,438 @@ class TTSEngine:
                     await self.play_pcm(pcm_data, sr)
 
                 synth_task = next_task
+
+
+def check_local_model_available(model_name: str = "small") -> bool:
+    """Check if the faster-whisper model is already cached locally without accessing internet."""
+    try:
+        from faster_whisper import download_model
+        download_model(model_name, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+def prepare_local_model(model_name: str = "small") -> bool:
+    """Download and cache the faster-whisper model for offline backup."""
+    print(f"\n[Kira]: Pre-downloading faster-whisper '{model_name}' model for offline backup...")
+    try:
+        from faster_whisper import download_model
+        path = download_model(model_name, local_files_only=False)
+        print(f"[Kira]: Successfully prepared faster-whisper '{model_name}' model at: {path}\n")
+        return True
+    except Exception as exc:
+        print(f"[Kira]: Failed to download faster-whisper '{model_name}' model: {exc}\n")
+        return False
+
+
+def parse_hotkey_spec(spec: str) -> Any:
+    """Parse a single key name (e.g. 'F9') into a pynput keyboard.Key or KeyCode."""
+    s = spec.strip().lower()
+    if hasattr(keyboard.Key, s):
+        return getattr(keyboard.Key, s)
+    if s.startswith("f") and s[1:].isdigit():
+        return getattr(keyboard.Key, s, None)
+    return keyboard.KeyCode.from_char(s)
+
+
+class VoiceManager:
+    """
+    Coordinates Voice Ears (STT), Mouth (TTS), Hotkeys, and Safety Gates.
+    """
+
+    def __init__(
+        self,
+        config: dict,
+        mode_manager: Any = None,
+        on_utterance: Optional[Callable[[str, float], Any]] = None,
+    ) -> None:
+        self.config = config
+        self.mode_manager = mode_manager
+        self.on_utterance = on_utterance
+
+        voice_cfg = config.get("voice", {})
+        self.ptt_hotkey_name = voice_cfg.get("hotkey", "F9")
+        self.kill_hotkey_name = voice_cfg.get("kill_hotkey", "ctrl+alt+k")
+
+        self.talk_key = parse_hotkey_spec(self.ptt_hotkey_name)
+        self.min_duration = float(voice_cfg.get("stt", {}).get("min_duration", 0.3))
+        self.max_duration = float(voice_cfg.get("stt", {}).get("max_duration", 30.0))
+
+        # Mute state
+        self.is_muted_mic = False
+        self.is_muted_voice = False
+
+        # Privacy notice
+        self.privacy_notice = voice_cfg.get(
+            "safety", {}
+        ).get("privacy_notice", "Audio may be sent to Groq for speech recognition.")
+
+        # Sub-engines
+        self.stt = STTEngine(config)
+        self.tts = TTSEngine(config)
+
+        # Hotkey tracking (only talk key and kill key tracked, never other keys)
+        self._ctrl_down = False
+        self._alt_down = False
+        self._talk_key_held = False
+        self._keyboard_listener: Optional[keyboard.Listener] = None
+
+        # Recording state
+        self._is_recording = False
+        self._recorded_frames: list[np.ndarray] = []
+        self._record_start_time = 0.0
+        self._input_stream: Optional[sd.InputStream] = None
+
+        # Event loop reference for bridging worker thread callbacks
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+        # Missing model warning at startup
+        local_model = self.stt.local_model_name
+        if not check_local_model_available(local_model):
+            print(
+                f"\n[Kira voice warning]: Local backup Whisper model '{local_model}' is not downloaded. "
+                f"Run 'python -m backend.voice --prepare' to enable offline STT fallback.\n"
+            )
+
+    def print_privacy_notice(self) -> None:
+        """Display transparent privacy notice regarding cloud speech recognition."""
+        print(f"\n[Kira Voice]: {self.privacy_notice}\n")
+
+    def mute_mic(self, muted: bool = True) -> None:
+        """Toggle microphone recording on/off."""
+        self.is_muted_mic = muted
+        status = "MUTED" if muted else "UNMUTED"
+        print(f"[Kira Voice]: Microphone is now {status}.")
+
+    def mute_voice(self, muted: bool = True) -> None:
+        """Toggle Kira speech playback on/off."""
+        self.is_muted_voice = muted
+        status = "MUTED" if muted else "UNMUTED"
+        print(f"[Kira Voice]: Assistant voice is now {status}.")
+
+    async def speak(self, text: str, speech_end_time: Optional[float] = None) -> None:
+        """Speak narration out loud unless voice output is muted."""
+        if self.is_muted_voice:
+            return
+        await self.tts.speak(text, speech_end_time=speech_end_time)
+
+    def stop_speech(self) -> None:
+        """Halt any ongoing speech synthesis or playback immediately."""
+        self.tts.stop()
+
+    def start_hotkey_listener(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        """Start global hotkey listener for Push-to-Talk and emergency kill."""
+        self._loop = loop or asyncio.get_event_loop()
+        if self._keyboard_listener is None:
+            self._keyboard_listener = keyboard.Listener(
+                on_press=self._on_press,
+                on_release=self._on_release,
+            )
+            self._keyboard_listener.daemon = True
+            self._keyboard_listener.start()
+            logger.info("Voice hotkey listener started (PTT: %s, Kill: %s)", self.ptt_hotkey_name, self.kill_hotkey_name)
+
+    def stop_hotkey_listener(self) -> None:
+        """Stop global hotkey listener."""
+        if self._keyboard_listener:
+            try:
+                self._keyboard_listener.stop()
+            except Exception:
+                pass
+            self._keyboard_listener = None
+
+    def _on_press(self, key: Any) -> None:
+        """
+        Hotkey press handler.
+        Acts ONLY on talk key and kill key. Ignores key repeat and never logs other keys.
+        """
+        # Modifier tracking
+        if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+            self._ctrl_down = True
+        elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+            self._alt_down = True
+
+        # Emergency kill hotkey check (Ctrl+Alt+K)
+        k_char = getattr(key, "char", None)
+        if self._ctrl_down and self._alt_down and (k_char in ("k", "K") or key == keyboard.KeyCode.from_char("k")):
+            KILL_SWITCH.stop()
+            self.stop_speech()
+            print("\n[EMERGENCY KILL SWITCH: Ctrl+Alt+K pressed. All actions and audio halted.]\n")
+            return
+
+        # Talk hotkey check (e.g. F9)
+        if key == self.talk_key:
+            # Debounce key-repeat
+            if self._talk_key_held:
+                return
+            self._talk_key_held = True
+
+            # Interrupt ongoing Kira speech immediately
+            self.stop_speech()
+
+            if self.is_muted_mic:
+                print("\n[Kira Voice]: Microphone is muted. Press unmute to speak.\n")
+                return
+
+            self._start_recording()
+            print(f"\n[Kira listening... (hold {self.ptt_hotkey_name}, release to send)]")
+
+    def _on_release(self, key: Any) -> None:
+        """Hotkey release handler."""
+        if key in (keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
+            self._ctrl_down = False
+        elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+            self._alt_down = False
+
+        if key == self.talk_key:
+            self._talk_key_held = False
+            if self._is_recording:
+                audio_np, duration, speech_end_time = self._stop_recording()
+                if audio_np is not None and duration >= self.min_duration:
+                    if self._loop and self._loop.is_running():
+                        asyncio.run_coroutine_threadsafe(
+                            self.handle_recorded_audio(audio_np, duration, speech_end_time),
+                            self._loop,
+                        )
+                else:
+                    logger.debug("Audio tap ignored (%.2fs < min %.2fs).", duration, self.min_duration)
+
+    def _start_recording(self) -> None:
+        """Begin capturing microphone frames into memory."""
+        self._recorded_frames = []
+        self._record_start_time = time.monotonic()
+        self._is_recording = True
+
+        def _callback(indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
+            if self._is_recording:
+                self._recorded_frames.append(indata.copy())
+                if (time.monotonic() - self._record_start_time) >= self.max_duration:
+                    self._is_recording = False
+
+        try:
+            self._input_stream = sd.InputStream(
+                samplerate=16000,
+                channels=1,
+                dtype="int16",
+                callback=_callback,
+            )
+            self._input_stream.start()
+        except Exception as exc:
+            logger.warning("Could not open microphone input stream: %s", exc)
+            self._is_recording = False
+            self._input_stream = None
+
+    def _stop_recording(self) -> tuple[Optional[np.ndarray], float, float]:
+        """Stop capturing and return concatenated audio array in memory."""
+        self._is_recording = False
+        speech_end_time = time.monotonic()
+        duration = speech_end_time - self._record_start_time
+
+        if self._input_stream:
+            try:
+                self._input_stream.stop()
+                self._input_stream.close()
+            except Exception:
+                pass
+            self._input_stream = None
+
+        if not self._recorded_frames:
+            return None, duration, speech_end_time
+
+        audio_np = np.concatenate(self._recorded_frames, axis=0).flatten()
+        return audio_np, duration, speech_end_time
+
+    async def handle_recorded_audio(
+        self,
+        audio_np: np.ndarray,
+        duration: float,
+        speech_end_time: float,
+    ) -> Optional[str]:
+        """
+        Process recorded audio:
+        1. Transcribe via Groq -> faster-whisper
+        2. Evaluate quality and hallucinations
+        3. Print recognized text
+        4. Intercept stop word and mode commands locally BEFORE LLM
+        5. Forward valid task utterance to agent callback
+        """
+        result = await self.stt.transcribe(audio_np, duration)
+        if result is None:
+            return None
+
+        # Print recognized text before acting on it
+        if result.text.strip():
+            print(f"\nYou [voice]: {result.text}")
+
+        # Quality & hallucination handling
+        if not result.is_valid:
+            if result.hallucination:
+                logger.info("Ignoring silence hallucination ('%s').", result.text)
+                return None
+            if result.low_confidence or not result.text.strip():
+                clarify_msg = "I didn't quite catch that. Could you please repeat?"
+                print(f"[Kira]: {clarify_msg}")
+                await self.speak(clarify_msg)
+                return None
+
+        utterance = result.text.strip()
+        norm = normalize_utterance(utterance)
+
+        # 1. Stop-word: only exact normalized "stop" or "kira stop"
+        if norm in ("stop", "kira stop"):
+            KILL_SWITCH.stop()
+            self.stop_speech()
+            stop_msg = "Kill switch ACTIVATED by voice command ('stop'). All actions halted."
+            print(f"[Kira]: {stop_msg}")
+            return None
+
+        # 2. Free mode forbidden by voice
+        if norm == "free mode":
+            free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
+            print(f"[Kira]: {free_msg}")
+            await self.speak(free_msg)
+            return None
+
+        # 3. Restricted mode allowed by voice
+        if norm == "restricted mode":
+            if self.mode_manager:
+                self.mode_manager.enter_restricted()
+            restr_msg = "Switched to Restricted mode."
+            print(f"[Kira]: {restr_msg}")
+            await self.speak(restr_msg)
+            return None
+
+        # Forward valid utterance to callback if configured
+        if self.on_utterance:
+            await self.on_utterance(utterance, speech_end_time)
+
+        return utterance
+
+
+def shared_confirm(
+    prompt_text: str,
+    voice_manager: Optional[VoiceManager] = None,
+    timeout_seconds: float = 10.0,
+) -> bool:
+    """
+    Shared confirmation gate supporting both typed and spoken responses.
+    First response wins.
+
+    Rules
+    -----
+    - Kira reads back the action out loud first.
+    - The 10-second timer begins AFTER Kira finishes speaking.
+    - Only an explicit fresh 'yes' or 'y' counts as approval.
+    - Anything else or no answer (timeout) means 'no' (declined).
+    """
+    import queue
+
+    # 1. Read-back narration (TTS) before starting timer
+    read_back = f"Confirmation required. {prompt_text}. Do you approve? Say or type yes to proceed."
+    if voice_manager and not voice_manager.is_muted_voice:
+        try:
+            # Run TTS synchronously until finish so timer starts strictly AFTER playback
+            asyncio.run(voice_manager.speak(read_back))
+        except RuntimeError:
+            # If an event loop is already running in this thread, schedule it
+            try:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(voice_manager.speak(read_back))
+            except Exception as exc:
+                logger.debug("Read-back TTS error: %s", exc)
+        except Exception as exc:
+            logger.debug("Read-back TTS error: %s", exc)
+
+    result_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+
+    # 2. Hook voice utterance callback during confirmation window
+    previous_callback = voice_manager.on_utterance if voice_manager else None
+
+    async def _voice_confirm_hook(utterance: str, speech_end_time: float) -> None:
+        result_queue.put(("voice", utterance))
+
+    if voice_manager:
+        voice_manager.on_utterance = _voice_confirm_hook
+
+    # 3. Spawn stdin reader thread
+    def _terminal_input_worker() -> None:
+        try:
+            ans = input(f"\n[Policy Confirmation] {prompt_text} (yes/no, 10s timeout): ").strip()
+            result_queue.put(("typed", ans))
+        except Exception:
+            pass
+
+    input_thread = threading.Thread(target=_terminal_input_worker, daemon=True)
+    input_thread.start()
+
+    # 4. Wait for first response or 10-second timeout
+    approved = False
+    try:
+        source, answer = result_queue.get(timeout=timeout_seconds)
+        norm = normalize_utterance(answer)
+        # Only clear 'yes' counts
+        if norm in ("yes", "y"):
+            approved = True
+            logger.info("Confirmation granted via %s: '%s'", source, answer)
+        else:
+            approved = False
+            logger.info("Confirmation declined via %s: '%s'", source, answer)
+    except queue.Empty:
+        print(f"\n[Kira]: Confirmation timed out ({timeout_seconds:.0f}s). No answer means no.\n")
+        approved = False
+    finally:
+        if voice_manager:
+            voice_manager.on_utterance = previous_callback
+
+    return approved
+
+
+def main() -> None:
+    """CLI entrypoint for backend.voice."""
+    import yaml
+    from pathlib import Path
+
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print("Usage:")
+        print("  python -m backend.voice           Run voice listener REPL")
+        print("  python -m backend.voice --prepare Pre-download faster-whisper small model")
+        sys.exit(0)
+
+    if "--prepare" in sys.argv:
+        config_path = Path(__file__).parent.parent / "config.yaml"
+        local_model = "small"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+                local_model = cfg.get("voice", {}).get("stt", {}).get("local_model", "small")
+        success = prepare_local_model(local_model)
+        sys.exit(0 if success else 1)
+
+    print("=" * 54)
+    print("  Kira Voice Engine (Push-to-Talk: F9 | Kill: Ctrl+Alt+K)")
+    print("=" * 54)
+
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    vm = VoiceManager(cfg)
+    vm.print_privacy_notice()
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    vm.start_hotkey_listener(loop)
+
+    print("Hold F9 to speak, release to send. Press Ctrl+C to exit.")
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print("\nExiting voice engine.")
+    finally:
+        vm.stop_hotkey_listener()
+        loop.close()
+
+
+if __name__ == "__main__":
+    main()
