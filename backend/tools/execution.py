@@ -185,10 +185,11 @@ def run_command(
     else:
         working_dir = policy_module.WORKSPACE_ROOT
 
-    # 5. Code-generated temporary output file & runner batch inside workspace/
+    # 5. Code-generated temporary output file & runners inside workspace/
     tmp_id = uuid.uuid4().hex
     output_file = (policy_module.WORKSPACE_ROOT / f".tmp_cmd_{tmp_id}.txt").resolve()
     runner_bat = (policy_module.WORKSPACE_ROOT / f".tmp_run_{tmp_id}.bat").resolve()
+    runner_py = (policy_module.WORKSPACE_ROOT / f".tmp_live_{tmp_id}.py").resolve()
 
     proc: Optional[subprocess.Popen] = None
     try:
@@ -196,8 +197,44 @@ def run_command(
         should_open_window = os.name == "nt" and visible and not is_test
 
         if should_open_window:
-            # Launch in visible CMD window on Windows using CREATE_NEW_CONSOLE:
-            # Displays formatted header, output, and pauses for 5 seconds so the user can read it clearly
+            # Generate real-time live streaming script that keeps stdin attached to console
+            # so interactive prompts (e.g. input()) show on screen live and accept typing,
+            # while simultaneously mirroring all output into output_file.
+            py_content = (
+                "import sys, os, subprocess\r\n"
+                f"out_file = r'{output_file}'\r\n"
+                f"tokens = {tokens!r}\r\n"
+                f"cwd = r'{working_dir}'\r\n"
+                "env = os.environ.copy()\r\n"
+                "env['PYTHONUNBUFFERED'] = '1'\r\n"
+                "with open(out_file, 'w', encoding='utf-8', errors='replace') as f:\r\n"
+                "    try:\r\n"
+                "        proc = subprocess.Popen(\r\n"
+                "            tokens,\r\n"
+                "            cwd=cwd,\r\n"
+                "            stdout=subprocess.PIPE,\r\n"
+                "            stderr=subprocess.STDOUT,\r\n"
+                "            stdin=sys.stdin,\r\n"
+                "            bufsize=0,\r\n"
+                "            env=env,\r\n"
+                "        )\r\n"
+                "        while True:\r\n"
+                "            chunk = proc.stdout.read(1)\r\n"
+                "            if not chunk:\r\n"
+                "                break\r\n"
+                "            char = chunk.decode('utf-8', errors='replace')\r\n"
+                "            sys.stdout.write(char)\r\n"
+                "            sys.stdout.flush()\r\n"
+                "            f.write(char)\r\n"
+                "            f.flush()\r\n"
+                "        proc.wait()\r\n"
+                "    except Exception as exc:\r\n"
+                "        err = f'Execution error: {exc}\\n'\r\n"
+                "        sys.stdout.write(err)\r\n"
+                "        f.write(err)\r\n"
+            )
+            runner_py.write_text(py_content, encoding="utf-8")
+
             bat_content = (
                 "@echo off\r\n"
                 f'title Kira - Executing: {command}\r\n'
@@ -206,8 +243,7 @@ def run_command(
                 f"echo   [Kira] Running: {command}\r\n"
                 "echo ====================================================\r\n"
                 "echo.\r\n"
-                f'{command} > "{output_file}" 2>&1\r\n'
-                f'type "{output_file}"\r\n'
+                f'"{sys.executable}" "{runner_py}"\r\n'
                 "echo.\r\n"
                 "echo ====================================================\r\n"
                 "echo   [Done] Window will close in 5 seconds...\r\n"
@@ -259,6 +295,11 @@ def run_command(
         return f"Error: Command execution failed: {exc}"
 
     finally:
+        if runner_py.exists():
+            try:
+                runner_py.unlink()
+            except OSError:
+                pass
         if runner_bat.exists():
             try:
                 runner_bat.unlink()
