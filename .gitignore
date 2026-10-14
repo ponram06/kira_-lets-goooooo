@@ -34,3 +34,12 @@ workspace/*
 .vscode/settings.json
 *.swp
 
+# Audio files & temporary recordings
+*.wav
+*.mp3
+*.ogg
+*.pcm
+*.flac
+*.aac
+.tmp_*
+
