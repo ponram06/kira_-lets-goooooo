@@ -176,6 +176,12 @@ def run_command(
             except PolicyError as pe:
                 return f"Error: Path argument '{arg}' escapes the workspace: {pe}"
 
+    # For Windows cmd.exe built-in commands, wrap with cmd.exe /c so subprocess can execute them
+    if os.name == "nt" and binary.lower() in ("dir", "echo", "type"):
+        exec_tokens = ["cmd.exe", "/c"] + tokens
+    else:
+        exec_tokens = tokens
+
     # Determine execution directory inside workspace/
     if cwd:
         try:
@@ -203,7 +209,7 @@ def run_command(
             py_content = (
                 "import sys, os, subprocess\r\n"
                 f"out_file = r'{output_file}'\r\n"
-                f"tokens = {tokens!r}\r\n"
+                f"tokens = {exec_tokens!r}\r\n"
                 f"cwd = r'{working_dir}'\r\n"
                 "env = os.environ.copy()\r\n"
                 "env['PYTHONUNBUFFERED'] = '1'\r\n"
@@ -262,7 +268,7 @@ def run_command(
             # Direct execution without shell
             with open(output_file, "w", encoding="utf-8", errors="replace") as out_f:
                 proc = subprocess.Popen(
-                    tokens,
+                    exec_tokens,
                     cwd=str(working_dir),
                     stdout=out_f,
                     stderr=subprocess.STDOUT,
