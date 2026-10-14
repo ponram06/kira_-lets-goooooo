@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+
+# Python virtual environment
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Test artefacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Workspace contents (keep the folder, ignore what's inside)
+workspace/*
+!workspace/.gitkeep
+
+# Editor
+.vscode/settings.json
+*.swp
+

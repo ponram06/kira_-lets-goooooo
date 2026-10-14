@@ -1,0 +1,63 @@
+# =============================================================================
+# Jarvis — non-secret configuration
+# API keys belong in .env, never here.
+# =============================================================================
+
+providers:
+  - name: gemini
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    api_key_env: GEMINI_API_KEY
+    # FILL IN: e.g. "gemini-1.5-flash" or "gemini-2.0-flash-exp"
+    model: "gemini-2.0-flash"
+
+  - name: groq
+    base_url: "https://api.groq.com/openai/v1"
+    api_key_env: GROQ_API_KEY
+    # FILL IN: e.g. "llama-3.1-8b-instant" or "llama3-8b-8192"
+    model: "llama-3.1-8b-instant"
+
+  - name: openrouter
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: OPENROUTER_API_KEY
+    # FILL IN: pick any free model at openrouter.ai/models?q=free
+    model: "mistralai/mistral-7b-instruct:free"
+
+  - name: ollama
+    base_url: "http://localhost:11434/v1"
+    api_key_env: null          # Ollama runs locally — no key needed
+    model: "qwen2.5:7b"
+
+# ---------------------------------------------------------------------------
+# Cooldown durations (seconds)
+# ---------------------------------------------------------------------------
+cooldowns:
+  rate_limit:   900    # 15 min — HTTP 429 (transient rate limit)
+  timeout:       60    # 1 min  — network timeout or connection error
+  server_error:  60    # 1 min  — HTTP 5xx
+  quota:       3600    # 1 hr   — quota / daily-limit exhaustion (adjust freely)
+
+# Rolling conversation memory: total user+assistant messages kept
+memory_limit: 20
+
+# =============================================================================
+# Persona
+# Change name to "ryuk" and swap system_prompt for the sarcastic persona.
+# Both personas share the same safety rules.
+# =============================================================================
+persona:
+  name: kira
+  system_prompt: |
+    You are Kira, a calm and strategic AI mentor for software developers.
+    You think carefully before answering, explain your reasoning step by step,
+    and guide the user with precision and clarity. When performing tasks on
+    the user's computer you narrate each action before taking it.
+    You never rush. You prioritise correctness and safety above speed.
+    When you do not know something you say so and suggest how to find out.
+
+# =============================================================================
+# Permission mode settings
+# =============================================================================
+mode:
+  # Seconds before Free mode auto-reverts to Restricted (default 10 minutes)
+  free_revert_timeout: 600
+
