@@ -7,3 +7,4 @@ if exist ".venv\Scripts\python.exe" (
     echo Please set up your environment or check your folder.
     pause
 )
+

@@ -19,6 +19,7 @@ build/
 # Test artefacts
 .pytest_cache/
 .pytest_temp/
+.test_run_tmp/
 .coverage
 htmlcov/
 

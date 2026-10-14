@@ -185,21 +185,32 @@ def run_command(
     else:
         working_dir = policy_module.WORKSPACE_ROOT
 
-    # 5. Code-generated temporary output file inside workspace/
+    # 5. Code-generated temporary output file & runner batch inside workspace/
     tmp_id = uuid.uuid4().hex
     output_file = (policy_module.WORKSPACE_ROOT / f".tmp_cmd_{tmp_id}.txt").resolve()
+    runner_bat = (policy_module.WORKSPACE_ROOT / f".tmp_run_{tmp_id}.bat").resolve()
 
     proc: Optional[subprocess.Popen] = None
     try:
         is_interactive = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
         if os.name == "nt" and visible and is_interactive:
-            # Launch in visible CMD window on Windows:
+            # Launch in visible CMD window on Windows using CREATE_NEW_CONSOLE:
             # displays output in window AND saves to temp file, keeps open ~3s
-            cmd_line = f'start /wait "" cmd.exe /c "{command} > "{output_file}" 2>&1 & type "{output_file}" & timeout /t 3 > nul"'
+            # We generate a clean batch script to avoid any nested quotes / cmd.exe quoting bugs
+            bat_content = (
+                "@echo off\r\n"
+                f'cd /d "{working_dir}"\r\n'
+                f'{command} > "{output_file}" 2>&1\r\n'
+                f'type "{output_file}"\r\n'
+                "timeout /t 3 /nobreak > nul\r\n"
+            )
+            runner_bat.write_text(bat_content, encoding="utf-8")
+
             proc = subprocess.Popen(
-                ["cmd.exe", "/c", cmd_line],
+                ["cmd.exe", "/c", str(runner_bat)],
                 cwd=str(working_dir),
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
                 shell=False,
             )
         else:
@@ -239,6 +250,11 @@ def run_command(
         return f"Error: Command execution failed: {exc}"
 
     finally:
+        if runner_bat.exists():
+            try:
+                runner_bat.unlink()
+            except OSError:
+                pass
         if output_file.exists():
             try:
                 output_file.unlink()
