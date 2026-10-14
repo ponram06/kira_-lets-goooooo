@@ -37,7 +37,7 @@ load_dotenv()  # Load .env into os.environ at import time
 
 logger = logging.getLogger(__name__)
 
-# Default config path: jarvis/config.yaml (one level above this file's package)
+# Default config path: config.yaml (one level above this file's package)
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.yaml"
 
 # Keywords that distinguish quota / daily-limit errors from transient 429s

@@ -3,7 +3,7 @@ brain.py
 ========
 Terminal chat loop with rolling conversation memory.
 
-Run from the jarvis/ directory::
+Run from the project root directory::
 
     python -m backend.brain
 

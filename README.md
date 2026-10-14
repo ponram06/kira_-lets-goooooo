@@ -1,4 +1,4 @@
-# Jarvis — AI Desktop Assistant (Steps 1 & 2)
+# Kira — AI Desktop Assistant (Steps 1 & 2)
 
 Brain core + policy layer.  No voice, avatar, or real tools yet.
 
@@ -7,7 +7,7 @@ Brain core + policy layer.  No voice, avatar, or real tools yet.
 ## Project layout
 
 ```
-jarvis/
+kira/
 ├── backend/
 │   ├── __init__.py
 │   ├── providers.py   # LLM provider manager (fallback + cooldowns)
@@ -30,7 +30,7 @@ jarvis/
 
 ## Step 1 — First-time setup
 
-Run all commands from `d:\kira\jarvis\`.
+Run all commands from `d:\kira\`.
 
 ### 1. Create and activate the virtual environment
 
