@@ -192,18 +192,27 @@ def run_command(
 
     proc: Optional[subprocess.Popen] = None
     try:
-        is_interactive = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+        is_test = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+        should_open_window = os.name == "nt" and visible and not is_test
 
-        if os.name == "nt" and visible and is_interactive:
+        if should_open_window:
             # Launch in visible CMD window on Windows using CREATE_NEW_CONSOLE:
-            # displays output in window AND saves to temp file, keeps open ~3s
-            # We generate a clean batch script to avoid any nested quotes / cmd.exe quoting bugs
+            # Displays formatted header, output, and pauses for 5 seconds so the user can read it clearly
             bat_content = (
                 "@echo off\r\n"
+                f'title Kira - Executing: {command}\r\n'
                 f'cd /d "{working_dir}"\r\n'
+                "echo ====================================================\r\n"
+                f"echo   [Kira] Running: {command}\r\n"
+                "echo ====================================================\r\n"
+                "echo.\r\n"
                 f'{command} > "{output_file}" 2>&1\r\n'
                 f'type "{output_file}"\r\n'
-                "timeout /t 3 /nobreak > nul\r\n"
+                "echo.\r\n"
+                "echo ====================================================\r\n"
+                "echo   [Done] Window will close in 5 seconds...\r\n"
+                "echo ====================================================\r\n"
+                "ping 127.0.0.1 -n 6 > nul\r\n"
             )
             runner_bat.write_text(bat_content, encoding="utf-8")
 
