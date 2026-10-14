@@ -23,6 +23,8 @@ Guards & Rules
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 import time
@@ -67,6 +69,12 @@ class AgentRunner:
         self.max_steps = max_steps
         self.max_retries = max_retries
 
+    async def _confirm(self, prompt_text: str) -> bool:
+        """Execute confirmation callback safely whether sync or async."""
+        if inspect.iscoroutinefunction(self.confirm_callback):
+            return await self.confirm_callback(prompt_text)
+        return self.confirm_callback(prompt_text)
+
     async def run(
         self,
         messages: list[dict],
@@ -93,7 +101,7 @@ class AgentRunner:
             if step >= self.max_steps:
                 logger.info("Reached step limit (%d).", self.max_steps)
                 if not has_continued:
-                    cont = self.confirm_callback(
+                    cont = await self._confirm(
                         f"Reached {self.max_steps} steps. Would you like to continue for up to 15 more steps? (yes/no):"
                     )
                     if cont:
@@ -198,7 +206,7 @@ class AgentRunner:
                         + ("Shell metacharacters/chaining blocked." if chained_flag else "Do not attempt this action again.")
                     )
                 elif decision == "ask":
-                    approved = self.confirm_callback(
+                    approved = await self._confirm(
                         f"Action '{fn_name}' requires confirmation (Mode: {self.mode_manager.mode.value}). "
                         f"Arguments: {fn_args}. Allow execution? (yes/no):"
                     )
