@@ -3,23 +3,22 @@
  * 2D Canvas sprite renderer with breathing, glow overlays, and 30 FPS cap.
  */
 
-// Import pure calculations (bundled or accessible in renderer script context)
-// In browser renderer context without bundler, we can define the pure functions or import them.
-
 class SpriteRenderer {
   /**
    * @param {HTMLCanvasElement} canvas
    * @param {object} config
+   * @param {object} characterMeta
    */
-  constructor(canvas, config) {
+  constructor(canvas, config, characterMeta) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.config = config || {};
+    this.characterMeta = characterMeta || {};
 
     this.charConfig = this.config.character || { x: 160, y: 80, width: 300, height: 320 };
     this.glowConfig = this.config.glow || {
-      eye: { x: 228, y: 140, radius: 14, color: 'rgba(255, 60, 60, 0.6)' },
-      apple: { x: 240, y: 270, radius: 28, color: 'rgba(255, 20, 20, 0.85)' }
+      eye: { x: 310, y: 180, radius: 14, color: 'rgba(255, 60, 60, 0.65)' },
+      apple: { x: 310, y: 320, radius: 28, color: 'rgba(255, 20, 20, 0.85)' }
     };
 
     this.state = 'idle';
@@ -40,32 +39,37 @@ class SpriteRenderer {
   }
 
   _initImages() {
-    let loadedCount = 0;
-    const checkReady = () => {
-      loadedCount++;
-      if (loadedCount >= 1) {
-        this.imagesLoaded = true;
+    this.baseImage.onload = () => {
+      this.imagesLoaded = true;
+    };
+    this.baseImage.onerror = () => {
+      // If dataUrl failed or path failed, try relative path to placeholder
+      if (!this.baseImage.src.includes('placeholder.png')) {
+        this.baseImage.src = '../../assets/placeholder.png';
       }
     };
 
-    // Load base character image
-    this.baseImage.onload = checkReady;
-    this.baseImage.onerror = () => {
-      // Fallback to placeholder
-      this.baseImage.src = '../assets/placeholder.png';
-    };
+    // Load from data URL passed by main process (zero network/path failure)
+    if (this.characterMeta?.dataUrl) {
+      this.baseImage.src = this.characterMeta.dataUrl;
+    } else {
+      this.baseImage.src = '../../assets/placeholder.png';
+    }
 
-    // Try ryuk.png first, fallback handled in onerror
-    this.baseImage.src = '../assets/ryuk.png';
-
-    // Optional mouth open image
-    this.mouthOpenImage.onload = () => {
-      this.hasMouthOpenImage = true;
-    };
-    this.mouthOpenImage.onerror = () => {
-      this.hasMouthOpenImage = false;
-    };
-    this.mouthOpenImage.src = '../assets/ryuk_mouth_open.png';
+    if (this.characterMeta?.mouthOpenDataUrl) {
+      this.mouthOpenImage.onload = () => {
+        this.hasMouthOpenImage = true;
+      };
+      this.mouthOpenImage.src = this.characterMeta.mouthOpenDataUrl;
+    } else {
+      this.mouthOpenImage.onload = () => {
+        this.hasMouthOpenImage = true;
+      };
+      this.mouthOpenImage.onerror = () => {
+        this.hasMouthOpenImage = false;
+      };
+      this.mouthOpenImage.src = '../../assets/ryuk_mouth_open.png';
+    }
   }
 
   setState(newState) {
@@ -105,8 +109,6 @@ class SpriteRenderer {
     const h = this.canvas.height;
 
     ctx.clearRect(0, 0, w, h);
-
-    if (!this.imagesLoaded) return;
 
     // Smooth loudness using exponential moving average
     this.smoothedLoudness += 0.35 * (this.rawLoudness - this.smoothedLoudness);
@@ -203,7 +205,13 @@ class SpriteRenderer {
       this.smoothedLoudness > 0.25;
 
     const imgToDraw = useMouthOpen ? this.mouthOpenImage : this.baseImage;
-    ctx.drawImage(imgToDraw, drawX, drawY, this.charConfig.width, this.charConfig.height);
+
+    if (this.imagesLoaded) {
+      ctx.drawImage(imgToDraw, drawX, drawY, this.charConfig.width, this.charConfig.height);
+    } else {
+      // Instant vector fallback while image loads or if file missing
+      this._drawVectorFallback(ctx, drawX, drawY, this.charConfig.width, this.charConfig.height);
+    }
 
     ctx.restore();
 
@@ -225,6 +233,61 @@ class SpriteRenderer {
         this.glowConfig.apple.color
       );
     }
+  }
+
+  _drawVectorFallback(ctx, x, y, width, height) {
+    ctx.save();
+    const cx = x + width / 2;
+    const cy = y + height / 2;
+
+    // Dark winged character silhouette
+    ctx.fillStyle = '#262933';
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 2;
+
+    // Wings
+    ctx.beginPath();
+    ctx.moveTo(cx - 20, cy + 10);
+    ctx.lineTo(cx - 85, cy - 60);
+    ctx.lineTo(cx - 40, cy + 50);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx + 20, cy + 10);
+    ctx.lineTo(cx + 85, cy - 60);
+    ctx.lineTo(cx + 40, cy + 50);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Body
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 30, 48, 65, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(cx, cy - 45, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Red eyes
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(cx - 9, cy - 47, 4, 0, Math.PI * 2);
+    ctx.arc(cx + 9, cy - 47, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Apple in hands
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(cx, cy + 70, 18, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   _drawModeIndicator(ctx, x, y, radius) {

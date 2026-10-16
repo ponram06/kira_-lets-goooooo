@@ -27,7 +27,7 @@
     canvas.width = config.window.width || 480;
     canvas.height = config.window.height || 420;
   }
-  const renderer = new window.SpriteRenderer(canvas, config);
+  const renderer = new window.SpriteRenderer(canvas, config, configData.characterMeta);
   renderer.start();
 
   // 3. Setup speech bubble
@@ -161,3 +161,4 @@
     }
   });
 })();
+

@@ -117,12 +117,22 @@ function loadCharacterAssetAndMask() {
     const bitmap = img.toBitmap();
     const mask = buildHitMask(bitmap, size.width, size.height, config.alpha_threshold || 20);
 
+    const mouthOpenPath = path.join(assetsDir, 'ryuk_mouth_open.png');
+    let mouthOpenDataUrl = null;
+    if (fs.existsSync(mouthOpenPath)) {
+      try {
+        mouthOpenDataUrl = nativeImage.createFromPath(mouthOpenPath).toDataURL();
+      } catch {}
+    }
+
     characterHitMask = mask;
     characterImageMeta = {
       width: size.width,
       height: size.height,
       isPlaceholder,
       assetPath: targetPath,
+      dataUrl: img.toDataURL(),
+      mouthOpenDataUrl,
       maskLength: mask.length,
       isNonEmpty: isMaskNonEmpty(mask)
     };
@@ -304,7 +314,9 @@ function setupIpcHandlers() {
       characterMeta: {
         width: characterImageMeta.width,
         height: characterImageMeta.height,
-        isPlaceholder: characterImageMeta.isPlaceholder
+        isPlaceholder: characterImageMeta.isPlaceholder,
+        dataUrl: characterImageMeta.dataUrl,
+        mouthOpenDataUrl: characterImageMeta.mouthOpenDataUrl
       },
       hitMask: characterHitMask ? Array.from(characterHitMask) : []
     };
