@@ -825,13 +825,26 @@ class VoiceManager:
             if self._is_recording:
                 audio_np, duration, speech_end_time = self._stop_recording()
                 if audio_np is not None and duration >= self.min_duration:
+                    print(f"\n[Processing speech ({duration:.1f}s)...]", flush=True)
                     if self._loop and self._loop.is_running():
-                        asyncio.run_coroutine_threadsafe(
+                        fut = asyncio.run_coroutine_threadsafe(
                             self.handle_recorded_audio(audio_np, duration, speech_end_time),
                             self._loop,
                         )
+
+                        def _on_future_done(f: Any) -> None:
+                            try:
+                                f.result()
+                            except Exception as exc:
+                                print(f"\n[Kira Voice Error]: {exc}\n", flush=True)
+
+                        fut.add_done_callback(_on_future_done)
                 else:
-                    logger.debug("Audio tap ignored (%.2fs < min %.2fs).", duration, self.min_duration)
+                    tap_dur = duration if audio_np is not None else 0.0
+                    print(
+                        f"\n[Audio tap too short ({tap_dur:.2f}s < min {self.min_duration:.1f}s) — hold {self.ptt_hotkey_name} while speaking]\n",
+                        flush=True,
+                    )
 
     def _start_recording(self) -> None:
         """Begin capturing microphone frames into memory."""
@@ -892,57 +905,62 @@ class VoiceManager:
         4. Intercept stop word and mode commands locally BEFORE LLM
         5. Forward valid task utterance to agent callback
         """
-        result = await self.stt.transcribe(audio_np, duration)
-        if result is None:
-            return None
-
-        # Print recognized text before acting on it
-        if result.text.strip():
-            print(f"\nYou [voice]: {result.text}")
-
-        # Quality & hallucination handling
-        if not result.is_valid:
-            if result.hallucination:
-                logger.info("Ignoring silence hallucination ('%s').", result.text)
-                return None
-            if result.low_confidence or not result.text.strip():
-                clarify_msg = "I didn't quite catch that. Could you please repeat?"
-                print(f"[Kira]: {clarify_msg}")
-                await self.speak(clarify_msg)
+        try:
+            result = await self.stt.transcribe(audio_np, duration)
+            if result is None:
                 return None
 
-        utterance = result.text.strip()
-        norm = normalize_utterance(utterance)
+            # Print recognized text before acting on it
+            if result.text.strip():
+                print(f"\nYou [voice]: {result.text}", flush=True)
 
-        # 1. Stop-word: only exact normalized "stop" or "kira stop"
-        if norm in ("stop", "kira stop"):
-            KILL_SWITCH.stop()
-            self.stop_speech()
-            stop_msg = "Kill switch ACTIVATED by voice command ('stop'). All actions halted."
-            print(f"[Kira]: {stop_msg}")
+            # Quality & hallucination handling
+            if not result.is_valid:
+                if result.hallucination:
+                    print(f"[Notice: Silence or background sound ('{result.text}'). Please speak clearly.]", flush=True)
+                    return None
+                if result.low_confidence or not result.text.strip():
+                    clarify_msg = "I didn't quite catch that. Could you please repeat?"
+                    print(f"[Kira]: {clarify_msg}", flush=True)
+                    await self.speak(clarify_msg)
+                    return None
+
+            utterance = result.text.strip()
+            norm = normalize_utterance(utterance)
+
+            # 1. Stop-word: only exact normalized "stop" or "kira stop"
+            if norm in ("stop", "kira stop"):
+                KILL_SWITCH.stop()
+                self.stop_speech()
+                stop_msg = "Kill switch ACTIVATED by voice command ('stop'). All actions halted."
+                print(f"[Kira]: {stop_msg}", flush=True)
+                return None
+
+            # 2. Free mode forbidden by voice
+            if norm == "free mode":
+                free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
+                print(f"[Kira]: {free_msg}", flush=True)
+                await self.speak(free_msg)
+                return None
+
+            # 3. Restricted mode allowed by voice
+            if norm == "restricted mode":
+                if self.mode_manager:
+                    self.mode_manager.enter_restricted()
+                restr_msg = "Switched to Restricted mode."
+                print(f"[Kira]: {restr_msg}", flush=True)
+                await self.speak(restr_msg)
+                return None
+
+            # Forward valid utterance to callback if configured
+            if self.on_utterance:
+                await self.on_utterance(utterance, speech_end_time)
+
+            return utterance
+        except Exception as exc:
+            logger.exception("Error in handle_recorded_audio: %s", exc)
+            print(f"\n[Kira Voice Error]: {exc}\n", flush=True)
             return None
-
-        # 2. Free mode forbidden by voice
-        if norm == "free mode":
-            free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
-            print(f"[Kira]: {free_msg}")
-            await self.speak(free_msg)
-            return None
-
-        # 3. Restricted mode allowed by voice
-        if norm == "restricted mode":
-            if self.mode_manager:
-                self.mode_manager.enter_restricted()
-            restr_msg = "Switched to Restricted mode."
-            print(f"[Kira]: {restr_msg}")
-            await self.speak(restr_msg)
-            return None
-
-        # Forward valid utterance to callback if configured
-        if self.on_utterance:
-            await self.on_utterance(utterance, speech_end_time)
-
-        return utterance
 
 
 def shared_confirm(
@@ -1023,6 +1041,99 @@ def shared_confirm(
     return approved
 
 
+def run_voice_diagnostic(config: dict) -> None:
+    """
+    Interactive diagnostic tool to test:
+    1. Speaker & Edge TTS playback
+    2. Microphone capture & volume levels
+    3. Push-to-Talk hotkey detection (F9 / Fn+F9)
+    """
+    print("\n" + "=" * 60)
+    print("  Kira Voice Diagnostic & Self-Test")
+    print("=" * 60)
+
+    # 1. Audio Devices
+    print("\n[Step 1/4] Checking Audio Devices...")
+    try:
+        in_dev = sd.query_devices(kind="input")
+        out_dev = sd.query_devices(kind="output")
+        print(f"  Default Input  (Mic):     {in_dev.get('name', 'Unknown')}")
+        print(f"  Default Output (Speaker): {out_dev.get('name', 'Unknown')}")
+    except Exception as exc:
+        print(f"  Could not query default devices: {exc}")
+
+    # 2. Speaker Test (Edge TTS)
+    print("\n[Step 2/4] Testing Voice Output (Speakers / Headphones)...")
+    print("  Synthesizing test greeting via Edge TTS and playing audio...")
+    tts = TTSEngine(config)
+    try:
+        asyncio.run(
+            tts.speak(
+                "Hello! This is Kira. If you can hear this audio, your text to speech output is working properly."
+            )
+        )
+        print("  -> Audio playback finished. Did you hear Kira speaking?")
+    except Exception as exc:
+        print(f"  -> Audio playback error: {exc}")
+
+    # 3. Microphone & STT Test
+    print("\n[Step 3/4] Testing Microphone & Speech Recognition...")
+    print("  Recording 3 seconds from your microphone now. Speak something (e.g. 'Hello Kira')...")
+    time.sleep(0.5)
+    try:
+        sample_rate = 16000
+        duration = 3.0
+        rec = sd.rec(int(sample_rate * duration), samplerate=sample_rate, channels=1, dtype="int16")
+        sd.wait()
+        max_amp = float(np.max(np.abs(rec)))
+        print(f"  Captured audio. Max Amplitude: {max_amp:.0f} (typical speech: >1000)")
+        if max_amp < 300:
+            print("  [Warning]: Audio signal is very low. Check your Windows microphone volume or mute switch!")
+
+        print("  Transcribing audio via Groq Whisper...")
+        stt = STTEngine(config)
+        audio_flat = rec.flatten()
+        result = asyncio.run(stt.transcribe(audio_flat, duration))
+        if result and result.text.strip():
+            print(f"  -> Successfully recognized: \"{result.text}\" (Confidence: logprob={result.avg_logprob:.2f})")
+        else:
+            print("  -> No clear speech recognized. If you spoke, check microphone volume.")
+    except Exception as exc:
+        print(f"  -> Microphone error: {exc}")
+
+    # 4. Hotkey Test
+    print("\n[Step 4/4] Testing Hotkey Listener...")
+    hotkey_name = config.get("voice", {}).get("hotkey", "F9")
+    print(f"  Press and release [{hotkey_name}] now (or [Fn+{hotkey_name}] on laptops with media keys)...")
+    print("  (Listening for 8 seconds, press Ctrl+C to skip)...")
+
+    detected_key = None
+    stop_event = threading.Event()
+
+    def on_press(key: Any) -> None:
+        nonlocal detected_key
+        detected_key = key
+        stop_event.set()
+
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    stop_event.wait(timeout=8.0)
+    listener.stop()
+
+    if detected_key:
+        print(f"  -> KEY DETECTED! Key captured: {detected_key}")
+        if str(detected_key).lower() == f"key.{hotkey_name.lower()}":
+            print(f"  -> Push-to-Talk [{hotkey_name}] matches perfectly!")
+        else:
+            print(f"  -> Note: Key pressed was {detected_key}. To use this key, update 'hotkey' in config.yaml.")
+    else:
+        print(f"  -> No key detected within 8s. On laptops, try holding [Fn] and pressing [{hotkey_name}], or Fn Lock (Fn+Esc).")
+
+    print("\n" + "=" * 60)
+    print("  Diagnostic complete! Run 'python -m backend.brain' to start.")
+    print("=" * 60 + "\n")
+
+
 def main() -> None:
     """CLI entrypoint for backend.voice."""
     import yaml
@@ -1031,16 +1142,22 @@ def main() -> None:
     if "-h" in sys.argv or "--help" in sys.argv:
         print("Usage:")
         print("  python -m backend.voice           Run voice listener REPL")
+        print("  python -m backend.voice --test    Run voice, mic and hotkey diagnostic test")
         print("  python -m backend.voice --prepare Pre-download faster-whisper small model")
         sys.exit(0)
 
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    cfg = {}
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+
+    if "--test" in sys.argv:
+        run_voice_diagnostic(cfg)
+        sys.exit(0)
+
     if "--prepare" in sys.argv:
-        config_path = Path(__file__).parent.parent / "config.yaml"
-        local_model = "small"
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                cfg = yaml.safe_load(f)
-                local_model = cfg.get("voice", {}).get("stt", {}).get("local_model", "small")
+        local_model = cfg.get("voice", {}).get("stt", {}).get("local_model", "small")
         success = prepare_local_model(local_model)
         sys.exit(0 if success else 1)
 

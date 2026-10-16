@@ -87,7 +87,8 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
     print(f"  {persona_name} — AI Dev Mentor")
     print(f"  Mode: {mode_manager.mode.value.upper()} | Type 'exit' or 'quit' to stop.")
     print("  Commands: 'restricted mode', 'free mode', 'stop', 'resume'")
-    print(f"  Voice: Push-to-Talk [{voice_manager.ptt_hotkey_name}] | Kill [{voice_manager.kill_hotkey_name}]")
+    print(f"  Voice: Push-to-Talk [{voice_manager.ptt_hotkey_name}] (hold to talk, or Fn+{voice_manager.ptt_hotkey_name} on laptops)")
+    print(f"  Kill: [{voice_manager.kill_hotkey_name}] | Diagnostic: python -m backend.voice --test")
     print("=" * 54)
     voice_manager.print_privacy_notice()
 
@@ -128,8 +129,8 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
             source, user_input, speech_end_time = await user_queue.get()
 
             if source == "voice":
-                sys.stdout.write(f"{user_input}\n")
-                sys.stdout.flush()
+                # The voice prompt already printed on its own line
+                pass
 
             if not user_input:
                 continue
