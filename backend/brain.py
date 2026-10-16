@@ -58,9 +58,15 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
     cfg = _load_config(config_path)
 
     persona: dict = cfg.get("persona", {})
-    system_prompt: str = persona.get("system_prompt", "You are a helpful assistant.")
+    p_name = persona.get("name", "kira").lower()
+    avail = persona.get("available_personas", {})
+    if p_name in avail:
+        persona_name = avail[p_name].get("name", p_name).capitalize()
+        system_prompt = avail[p_name].get("system_prompt", persona.get("system_prompt", ""))
+    else:
+        persona_name = persona.get("name", "Kira").capitalize()
+        system_prompt = persona.get("system_prompt", "You are a helpful assistant.")
     memory_limit: int = cfg.get("memory_limit", 20)
-    persona_name: str = persona.get("name", "Kira").capitalize()
     free_timeout: int = cfg.get("mode", {}).get("free_revert_timeout", 600)
     confirm_timeout: float = float(cfg.get("voice", {}).get("safety", {}).get("confirmation_timeout", 10.0))
 

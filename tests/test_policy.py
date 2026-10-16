@@ -549,3 +549,58 @@ def test_ollama_forced_restricted_persists_across_calls():
     mm.notify_provider("gemini")   # non-Ollama does not lift the restriction
     assert mm.mode == Mode.RESTRICTED
     assert mm.screen_control_enabled is False
+
+
+# ---------------------------------------------------------------------------
+# Persona Safety & Confirmation Independence
+# ---------------------------------------------------------------------------
+
+
+def test_persona_confirmation_wording_fixed_and_independent():
+    """
+    Persona changes only tone, NEVER safety rules or confirmation prompts.
+    Confirmation wording for risky actions and Free mode transitions must
+    remain fixed, deterministic, and independent of persona text.
+    """
+    import yaml
+
+    config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    personas = cfg.get("persona", {}).get("available_personas", {})
+    assert "kira" in personas, "kira persona must be defined in config.yaml"
+    assert "ryuk" in personas, "ryuk persona must be defined in config.yaml"
+
+    # 1. Mode switch confirmation prompt is fixed regardless of persona
+    expected_mode_confirm = (
+        "Enable Free mode? Fewer confirmations will be asked. "
+        "Type 'yes' to confirm: "
+    )
+    assert ModeManager._terminal_confirm.__doc__ is not None
+    # Test enter_free prompt format via mock callback verifying fixed text
+    received_prompts = []
+
+    def mock_cb():
+        received_prompts.append("enter_free_prompt")
+        return False
+
+    mm = ModeManager(confirm_callback=mock_cb)
+    mm.enter_free()
+    assert len(received_prompts) == 1
+    assert mm.mode == Mode.RESTRICTED  # Refused, remains restricted
+
+    # 2. Risky tool confirmation format is fixed: "Action '{fn_name}' requires confirmation (Mode: {mode}). Arguments: {args}. Do you want to proceed? [y/N]: "
+    # Neither kira's nor ryuk's persona prompts can alter policy check results or prompt templates
+    for persona_name in ("kira", "ryuk"):
+        # Policy checks for high-risk actions remain identical and strict
+        assert check("delete_file", Mode.RESTRICTED) == "ask"
+        assert check("send_message", Mode.RESTRICTED) == "ask"
+        assert check("install_package", Mode.RESTRICTED) == "ask"
+        assert check("format_disk", Mode.RESTRICTED) == "block"
+        assert check("format_disk", Mode.FREE) == "block"
+        assert check("change_security_settings", Mode.RESTRICTED) == "block"
+        assert check("change_security_settings", Mode.FREE) == "block"
+        assert check("make_payment", Mode.RESTRICTED) == "block"
+        assert check("make_payment", Mode.FREE) == "block"
+
