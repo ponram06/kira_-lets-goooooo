@@ -1,6 +1,6 @@
-# Kira — AI Desktop Assistant (Steps 1, 2, 3 & 4: Voice Pipeline)
+# Kira — AI Desktop Assistant (Steps 1 through 6: Voice Pipeline & WebSocket Server)
 
-Autonomous desktop assistant prototype with brain core, safety policy layer, tool suite, agent loop, and real-time voice pipeline (Ears & Mouth).
+Autonomous desktop assistant prototype with brain core, safety policy layer, tool suite, agent loop, real-time voice pipeline (Ears & Mouth), and WebSocket server for desktop avatar streaming.
 
 ---
 
@@ -11,18 +11,23 @@ kira/
 ├── backend/
 │   ├── __init__.py
 │   ├── providers.py      # LLM provider manager (ordered fallback + cooldowns)
-│   ├── brain.py          # Unified REPL (typed + voice PTT input)
+│   ├── brain.py          # Unified REPL (typed + voice PTT input + WebSocket server)
+│   ├── server.py         # Step 6: WebSocket server for live avatar feed & control
 │   ├── policy.py         # Permission layer (check / ModeManager / workspace guard)
 │   ├── audit.py          # Audit logging (logs/actions.jsonl) & live event feed
+│   ├── events.py         # In-process pub/sub event bus & JSONL action logger
 │   ├── agent.py          # Agent loop: Plan -> Act -> Observe -> Verify -> Report
-│   ├── voice.py          # Ears (Groq Whisper / faster-whisper) & Mouth (Edge TTS / miniaudio / pyttsx3)
+│   ├── voice.py          # Ears (Groq Whisper / faster-whisper) & Mouth (Edge TTS / pyttsx3)
 │   └── tools/            # Concrete tool implementations & schemas
 │       ├── __init__.py   # Tool registry and OpenAI function calling schemas
 │       ├── filesystem.py # create_folder, create_file (workspace/ only)
 │       ├── execution.py  # run_command (allow-listed commands, visible CMD)
 │       ├── system.py     # open_app, open_website (allow-lists)
+│       ├── vscode_visible.py # Visible VS Code typing with active window guard
 │       └── voice_stub.py # speak (TTS narrator routed to VoiceManager)
-├── logs/                 # actions.jsonl (git-ignored)
+├── scripts/
+│   └── ws_client.py      # Interactive test client to watch feed in terminal 2
+├── logs/                 # events.jsonl & actions.jsonl (git-ignored)
 ├── workspace/            # The ONLY directory tools are permitted to modify
 ├── tests/
 │   ├── conftest.py
@@ -30,10 +35,13 @@ kira/
 │   ├── test_policy.py
 │   ├── test_tools.py     # Unit tests for tools & allow-lists
 │   ├── test_agent.py     # End-to-end tests for agent loop & demo scenario
-│   └── test_voice.py     # Step 4 unit tests (STT/TTS/safety/cooldowns/hotkeys)
+│   ├── test_voice.py     # Step 4 unit tests (STT/TTS/safety/cooldowns/hotkeys)
+│   ├── test_vscode_visible.py # Visible VS Code typing tests
+│   ├── test_events.py    # Event bus pub/sub tests
+│   └── test_server.py    # Step 6 WebSocket server tests (17 passed)
 ├── .env.example
-├── .gitignore            # Audio (*.wav, *.mp3) & temp files ignored
-├── config.yaml           # Non-secret settings, models, hotkeys & allow-lists
+├── .gitignore            # Audio, temp files, .kira/ tokens ignored
+├── config.yaml           # Non-secret settings, models, hotkeys, server & allow-lists
 ├── pytest.ini
 ├── requirements.txt
 └── README.md
@@ -209,6 +217,64 @@ Kira features an in-process, thread-safe pub/sub event bus:
 
 ---
 
+## WebSocket Server & Live Avatar Action Feed (`backend/server.py`)
+
+Step 6 provides a lightweight, pure-asyncio WebSocket server for live action feed streaming and desktop avatar integration:
+
+### Security & Architecture
+- **Local Loopback Only**: Binds strictly to `127.0.0.1` on port `8765` (configurable in `config.yaml`).
+- **Ephemeral Authentication Token**:
+  - Generated at server startup via `secrets.token_urlsafe(32)`.
+  - Stored outside `workspace/` at `.kira/token` (never committed, git-ignored).
+  - Automatically deleted on server exit (`atexit`).
+  - Auth token is **never in the URL**. Sent as the client's first JSON message (`{"type": "auth", "token": "..."}`) within 5 seconds. Tokens compared with `secrets.compare_digest`.
+- **Host & Origin Validation**:
+  - `Host` header must match `127.0.0.1:8765` or `localhost:8765`.
+  - Web browser HTTP/HTTPS origins are **unconditionally rejected**.
+  - Local origins (`"null"`, `file://`, `vscode-webview://`, `electron://`) and non-browser clients require valid token authentication.
+- **Outbound Whitelisted Schema**:
+  - Designates exact fields per event type (`state`, `step_start`, `step_done`, `policy_ask`, `mode_change`, `speech`, `loudness`).
+  - Summaries truncated (<=120 chars), phone numbers masked (`[PHONE]`), zero raw files or secrets.
+  - Normalized audio loudness (`0.0` to `1.0` float) throttled to ~20/sec for lip-sync animation (never raw audio).
+- **Inbound Commands**:
+  - `stop`: Triggers `KILL_SWITCH.stop()` and halts speech immediately.
+  - `confirm`: Submits `yes` or `no` using the pending `question_id`. First answer across voice, typing, and socket wins.
+  - `restricted_mode`: Switches mode back to Restricted.
+  - `free_mode`: Explicitly refused over WebSocket.
+- **Resilience**:
+  - Runs in a dedicated background thread with its own `asyncio` event loop so terminal `input()` and long tool executions never block the server.
+  - Outbound bounded queues (50 msgs max): slow consumers are dropped without stalling Kira.
+  - Inbound rate limits: max 20 msgs/sec per client, max 4 KB frame size.
+  - Graceful degradation: If port is occupied or `server.enabled: false`, logs a warning and Kira continues.
+
+### Manual Verification with Test Client (`scripts/ws_client.py`)
+
+1. In **Terminal 1**, start Kira:
+   ```powershell
+   python -m backend.brain
+   ```
+2. In **Terminal 2**, run the test client:
+   ```powershell
+   python scripts/ws_client.py
+   ```
+3. What you will see:
+   - Initial authentication handshake and state snapshot:
+     ```text
+     [SNAPSHOT] State: IDLE | Mode: RESTRICTED
+     ```
+   - Hold **`F8`** (or configured hotkey) in Terminal 1 or speak:
+     ```text
+     [STATE] -> LISTENING
+     [STATE] -> THINKING
+     [STATE] -> SPEAKING
+     [SPEECH] Hello! How can I assist with your code?
+     [LOUDNESS] [########-------] 0.54
+     ```
+   - In Terminal 2, type `stop` to trigger the kill switch.
+   - When a risky action prompts for confirmation, type `yes <question_id>` in Terminal 2 to approve.
+
+---
+
 ## Known Limits & Safety Notes
 
 1. **VS Code PATH**: VS Code must be installed with the `code` CLI tool available on system `PATH`.
@@ -221,7 +287,7 @@ Kira features an in-process, thread-safe pub/sub event bus:
 
 ## Automated Test Suite
 
-Run the full automated test suite (**144 unit tests**, all offline/mocked):
+Run the full automated test suite (**162 unit tests**, all offline/mocked):
 
 ```powershell
 .venv\Scripts\pytest -v
@@ -232,8 +298,10 @@ Run the full automated test suite (**144 unit tests**, all offline/mocked):
 * `tests/test_events.py`: 6 passed (event pub/sub, ordering, secret stripping, restricted demo)
 * `tests/test_policy.py`: 47 passed, 1 skipped (permission modes, boundaries, kill switch)
 * `tests/test_providers.py`: 16 passed (provider fallback chain, cooldowns)
-* `tests/test_tools.py`: 18 passed (filesystem, run_command, open_app, open_website)
-* `tests/test_voice.py`: 25 passed (STT, TTS, sentence pipelining, hotkeys)
+* `tests/test_tools.py`: 19 passed (filesystem, run_command, open_app, open_website, cmd pause)
+* `tests/test_voice.py`: 25 passed (STT, TTS, sentence pipelining, hotkeys, shared confirm)
 * `tests/test_vscode_visible.py`: 8 passed (window wait, save verify, active window guard, fail-safe)
+* `tests/test_server.py`: 17 passed (token auth, origin/host checks, confirm question_id, slow client drop, throttling)
 
-Total: **144 passed, 1 skipped (100% green)**.
+Total: **162 passed, 1 skipped (100% green)**.
+
