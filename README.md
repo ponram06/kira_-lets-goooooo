@@ -172,15 +172,15 @@ To manually verify the complete voice pipeline on Windows:
 
 ## Automated Test Suite
 
-Run the full automated test suite (128 unit tests, all offline/mocked):
+Run the full automated test suite (130 unit tests, all offline/mocked):
 
 ```powershell
-pytest -v
+.venv\Scripts\pytest -v
 ```
 
 Run Step 4 voice tests only:
 
 ```powershell
-pytest tests/test_voice.py -v
+.venv\Scripts\pytest tests/test_voice.py -v
 ```
-Expected: **23 passed in ~1.5s**.
+Expected: **25 passed in ~1.5s**.
