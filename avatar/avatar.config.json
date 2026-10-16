@@ -1,0 +1,42 @@
+{
+  "window": {
+    "width": 480,
+    "height": 420,
+    "margin_right": 20,
+    "margin_bottom": 20
+  },
+  "alpha_threshold": 20,
+  "greeting": "Hey... Need anything?",
+  "glow": {
+    "eye": {
+      "x": 228,
+      "y": 140,
+      "radius": 14,
+      "color": "rgba(255, 60, 60, 0.6)"
+    },
+    "apple": {
+      "x": 240,
+      "y": 270,
+      "radius": 28,
+      "color": "rgba(255, 20, 20, 0.85)"
+    }
+  },
+  "character": {
+    "x": 160,
+    "y": 80,
+    "width": 300,
+    "height": 320
+  },
+  "bubble": {
+    "x": 10,
+    "y": 40,
+    "max_width": 220,
+    "fade_delay_ms": 3000
+  },
+  "connection": {
+    "url": "ws://127.0.0.1:8765",
+    "token_file": "../.kira/token",
+    "reconnect_min_ms": 1000,
+    "reconnect_max_ms": 10000
+  }
+}
