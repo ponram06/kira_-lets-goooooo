@@ -31,6 +31,7 @@ import time
 from typing import Any, Callable, Optional
 
 from backend.audit import log_action
+from backend import events as _events
 from backend.policy import KILL_SWITCH, Mode, ModeManager, check
 from backend.providers import ProviderManager
 from backend.tools import KIRA_TOOLS_SCHEMA, TOOL_FUNCTIONS
@@ -115,6 +116,13 @@ class AgentRunner:
             step += 1
             logger.info("Agent step %d/%d", step, self.max_steps)
 
+            # Publish step start event
+            _events.publish(
+                "agent.step_start",
+                f"Step {step}: asking LLM for next action.",
+                {"step": step, "max_steps": self.max_steps},
+            )
+
             # 3. Call LLM provider with tools enabled
             response_msg, provider = await self.provider_manager.ask(
                 current_messages,
@@ -198,6 +206,13 @@ class AgentRunner:
                     decision,
                 )
 
+                # Publish policy decision event
+                _events.publish(
+                    "policy.decision",
+                    f"Policy {decision}: {fn_name}",
+                    {"tool": fn_name, "decision": decision, "mode": self.mode_manager.mode.value},
+                )
+
                 # Branch on policy decision (no retries for block or user denial)
                 if decision == "block":
                     observation = (
@@ -213,7 +228,9 @@ class AgentRunner:
                     if not approved:
                         observation = f"USER DECLINED: Execution of '{fn_name}' was not approved by user."
                     else:
+                        _events.publish("tool.start", f"Running: {fn_name}", {"tool": fn_name, "args": fn_args})
                         observation = self._execute_tool_with_retries(fn_name, fn_args)
+                        _events.publish("tool.done", f"Done: {fn_name}", {"tool": fn_name, "result": observation[:200]})
                 elif decision == "countdown":
                     print(f"\n[Free Mode Countdown] Executing '{fn_name}' in 3 seconds... Press Ctrl+C or Stop to cancel.")
                     cancelled = False
@@ -225,14 +242,25 @@ class AgentRunner:
                     if cancelled or KILL_SWITCH.is_stopped():
                         observation = f"CANCELLED: '{fn_name}' was cancelled during countdown."
                     else:
+                        _events.publish("tool.start", f"Running: {fn_name}", {"tool": fn_name, "args": fn_args})
                         observation = self._execute_tool_with_retries(fn_name, fn_args)
+                        _events.publish("tool.done", f"Done: {fn_name}", {"tool": fn_name, "result": observation[:200]})
                 elif decision == "allow":
+                    _events.publish("tool.start", f"Running: {fn_name}", {"tool": fn_name, "args": fn_args})
                     observation = self._execute_tool_with_retries(fn_name, fn_args)
+                    _events.publish("tool.done", f"Done: {fn_name}", {"tool": fn_name, "result": observation[:200]})
                 else:
                     observation = f"ERROR: Unknown policy decision '{decision}'."
 
                 # Log to actions.jsonl and emit event
                 log_action(fn_name, fn_args, decision, observation)
+
+                # Publish step done event
+                _events.publish(
+                    "agent.step_done",
+                    f"Step {step} done: {fn_name} → {observation[:80].strip()}",
+                    {"step": step, "tool": fn_name, "decision": decision},
+                )
 
                 # Kill switch check immediately after tool call
                 if KILL_SWITCH.is_stopped():
