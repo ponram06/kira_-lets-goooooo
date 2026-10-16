@@ -9,16 +9,16 @@
   "greeting": "Hey... Need anything?",
   "glow": {
     "eye": {
-      "x": 310,
-      "y": 180,
+      "x": 296,
+      "y": 167,
       "radius": 14,
-      "color": "rgba(255, 60, 60, 0.65)"
+      "color": "rgba(255, 180, 20, 0.75)"
     },
     "apple": {
-      "x": 310,
-      "y": 320,
-      "radius": 28,
-      "color": "rgba(255, 20, 20, 0.85)"
+      "x": 213,
+      "y": 161,
+      "radius": 24,
+      "color": "rgba(255, 30, 30, 0.85)"
     }
   },
   "character": {
