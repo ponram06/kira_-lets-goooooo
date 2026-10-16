@@ -75,13 +75,18 @@ tools:
     - "google.com"
     - "python.org"
     - "stackoverflow.com"
+  # Seconds to wait for the VS Code window title to appear after launch
+  vscode_window_timeout: 15
+  # Seconds between individual keystrokes when typing code visibly
+  type_interval: 0.04
 
 # =============================================================================
 # Voice settings (Step 4)
 # =============================================================================
 voice:
   # Push-to-talk hotkey (hold to record, release to transcribe)
-  hotkey: "`"
+  # Configurable: use a function key (F8) or a character key (e.g. "`")
+  hotkey: "F8"
   # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
   kill_hotkey: "ctrl+alt+k"
 
