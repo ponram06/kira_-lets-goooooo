@@ -662,8 +662,18 @@ def prepare_local_model(model_name: str = "small") -> bool:
 
 
 def parse_hotkey_spec(spec: str) -> Any:
-    """Parse a single key name (e.g. 'F9') into a pynput keyboard.Key or KeyCode."""
+    """Parse a single key name (e.g. 'F9', '`', 'backtick') into a pynput keyboard.Key or KeyCode."""
     s = spec.strip().lower()
+    aliases = {
+        "backtick": "`",
+        "grave": "`",
+        "backquote": "`",
+        "`": "`",
+        "tilde": "~",
+        "~": "~",
+    }
+    if s in aliases:
+        return keyboard.KeyCode.from_char(aliases[s])
     if hasattr(keyboard.Key, s):
         return getattr(keyboard.Key, s)
     if s.startswith("f") and s[1:].isdigit():
@@ -777,6 +787,22 @@ class VoiceManager:
                 pass
             self._keyboard_listener = None
 
+    def _is_talk_key(self, key: Any) -> bool:
+        """
+        Check if a key event matches the configured Push-to-Talk hotkey.
+        Handles direct equality, char matching (case-insensitive & dead-key immune),
+        and Windows virtual key codes (VK 192 for ` / ~).
+        """
+        if key == self.talk_key:
+            return True
+        t_char = getattr(self.talk_key, "char", None)
+        k_char = getattr(key, "char", None)
+        if t_char and k_char and t_char.lower() == k_char.lower():
+            return True
+        if t_char in ("`", "~") and getattr(key, "vk", None) == 192:
+            return True
+        return False
+
     def _on_press(self, key: Any) -> None:
         """
         Hotkey press handler.
@@ -796,8 +822,8 @@ class VoiceManager:
             print("\n[EMERGENCY KILL SWITCH: Ctrl+Alt+K pressed. All actions and audio halted.]\n")
             return
 
-        # Talk hotkey check (e.g. F9)
-        if key == self.talk_key:
+        # Talk hotkey check (e.g. F9, `)
+        if self._is_talk_key(key):
             # Debounce key-repeat
             if self._talk_key_held:
                 return
@@ -820,7 +846,7 @@ class VoiceManager:
         elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
             self._alt_down = False
 
-        if key == self.talk_key:
+        if self._is_talk_key(key):
             self._talk_key_held = False
             if self._is_recording:
                 audio_np, duration, speech_end_time = self._stop_recording()
@@ -1104,7 +1130,9 @@ def run_voice_diagnostic(config: dict) -> None:
     # 4. Hotkey Test
     print("\n[Step 4/4] Testing Hotkey Listener...")
     hotkey_name = config.get("voice", {}).get("hotkey", "F9")
-    print(f"  Press and release [{hotkey_name}] now (or [Fn+{hotkey_name}] on laptops with media keys)...")
+    target_key = parse_hotkey_spec(hotkey_name)
+    hint = f" (or [Fn+{hotkey_name}] on laptops with media keys)" if hotkey_name.lower().startswith("f") else ""
+    print(f"  Press and release [{hotkey_name}] now{hint}...")
     print("  (Listening for 8 seconds, press Ctrl+C to skip)...")
 
     detected_key = None
@@ -1122,12 +1150,23 @@ def run_voice_diagnostic(config: dict) -> None:
 
     if detected_key:
         print(f"  -> KEY DETECTED! Key captured: {detected_key}")
-        if str(detected_key).lower() == f"key.{hotkey_name.lower()}":
+        matched = False
+        if detected_key == target_key:
+            matched = True
+        elif getattr(detected_key, "char", None) and getattr(target_key, "char", None):
+            if detected_key.char.lower() == target_key.char.lower():
+                matched = True
+        elif getattr(target_key, "char", None) in ("`", "~") and getattr(detected_key, "vk", None) == 192:
+            matched = True
+        elif str(detected_key).lower() == f"key.{hotkey_name.lower()}":
+            matched = True
+
+        if matched:
             print(f"  -> Push-to-Talk [{hotkey_name}] matches perfectly!")
         else:
             print(f"  -> Note: Key pressed was {detected_key}. To use this key, update 'hotkey' in config.yaml.")
     else:
-        print(f"  -> No key detected within 8s. On laptops, try holding [Fn] and pressing [{hotkey_name}], or Fn Lock (Fn+Esc).")
+        print(f"  -> No key detected within 8s. Check your keyboard or press [{hotkey_name}] firmly.")
 
     print("\n" + "=" * 60)
     print("  Diagnostic complete! Run 'python -m backend.brain' to start.")
@@ -1161,13 +1200,11 @@ def main() -> None:
         success = prepare_local_model(local_model)
         sys.exit(0 if success else 1)
 
+    hotkey_display = cfg.get("voice", {}).get("hotkey", "F9")
+    kill_display = cfg.get("voice", {}).get("kill_hotkey", "ctrl+alt+k")
     print("=" * 54)
-    print("  Kira Voice Engine (Push-to-Talk: F9 | Kill: Ctrl+Alt+K)")
+    print(f"  Kira Voice Engine (Push-to-Talk: [{hotkey_display}] | Kill: [{kill_display}])")
     print("=" * 54)
-
-    config_path = Path(__file__).parent.parent / "config.yaml"
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
 
     vm = VoiceManager(cfg)
     vm.print_privacy_notice()
@@ -1176,7 +1213,7 @@ def main() -> None:
     asyncio.set_event_loop(loop)
     vm.start_hotkey_listener(loop)
 
-    print("Hold F9 to speak, release to send. Press Ctrl+C to exit.")
+    print(f"Hold [{hotkey_display}] to speak, release to send. Press Ctrl+C to exit.")
     try:
         loop.run_forever()
     except KeyboardInterrupt:
