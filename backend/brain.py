@@ -31,6 +31,7 @@ import yaml
 from backend.agent import AgentRunner
 from backend.policy import KILL_SWITCH, ModeManager
 from backend.providers import ProviderManager
+from backend.server import WebSocketServer
 from backend.tools.voice_stub import register_voice_manager
 from backend.voice import VoiceManager, shared_confirm
 
@@ -83,6 +84,15 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
     # Rolling memory: user + assistant turns combined
     history: deque[dict] = deque(maxlen=memory_limit)
 
+    # Initialize WebSocket Server (Step 6)
+    ws_server = WebSocketServer(
+        config=cfg,
+        config_path=config_path,
+        mode_manager=mode_manager,
+        voice_manager=voice_manager,
+    )
+    ws_server.start_in_thread()
+
     print("=" * 54)
     print(f"  {persona_name} — AI Dev Mentor")
     print(f"  Mode: {mode_manager.mode.value.upper()} | Type 'exit' or 'quit' to stop.")
@@ -90,6 +100,8 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
     fn_hint = f", or Fn+{voice_manager.ptt_hotkey_name}" if voice_manager.ptt_hotkey_name.lower().startswith("f") else ""
     print(f"  Voice: Push-to-Talk [{voice_manager.ptt_hotkey_name}] (hold to talk{fn_hint})")
     print(f"  Kill: [{voice_manager.kill_hotkey_name}] | Diagnostic: python -m backend.voice --test")
+    if ws_server.running:
+        print(f"  Feed: ws://{ws_server.host}:{ws_server.port} (token: {ws_server.token_file})")
     print("=" * 54)
     voice_manager.print_privacy_notice()
 
@@ -188,6 +200,7 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
             await voice_manager.speak(reply, speech_end_time=speech_end_time)
 
     finally:
+        ws_server.stop()
         voice_manager.stop_hotkey_listener()
         voice_manager.stop_speech()
 
