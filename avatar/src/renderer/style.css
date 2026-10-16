@@ -1,0 +1,193 @@
+/* avatar/src/renderer/style.css */
+/* Strict stylesheet with zero inline styles */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Consolas', 'Courier New', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #f1f5f9;
+}
+
+#container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Canvas layer */
+#avatar-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Pointer events handled by interactive layers or container */
+}
+
+/* Character drag handle layer */
+#drag-handle {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 280px;
+  height: 320px;
+  cursor: grab;
+  z-index: 10;
+}
+
+#drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Speech Bubble */
+#speech-bubble {
+  position: absolute;
+  top: 60px;
+  left: 20px;
+  max-width: 220px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(239, 68, 68, 0.85);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateY(6px);
+  z-index: 20;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#speech-bubble.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+#speech-bubble.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Speech bubble tail pointing right towards the character */
+#speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: 24px;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid rgba(239, 68, 68, 0.85);
+}
+
+#bubble-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #f8fafc;
+  word-break: break-word;
+}
+
+/* Hover Menu */
+#hover-menu-container {
+  position: absolute;
+  top: 14px;
+  right: 20px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+#hover-trigger {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, color 0.2s;
+  pointer-events: auto;
+}
+
+#hover-trigger:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #f8fafc;
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+#menu-items {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+}
+
+#hover-menu-container:hover #menu-items,
+#hover-menu-container:focus-within #menu-items {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.menu-btn {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.menu-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f8fafc;
+}
+
+.menu-btn.stop-btn {
+  color: #f87171;
+  font-weight: bold;
+}
+
+.menu-btn.stop-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  color: #ffffff;
+}
+
+.menu-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
