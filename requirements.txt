@@ -20,3 +20,7 @@ pyttsx3>=2.90
 miniaudio>=1.60
 faster-whisper>=1.0.0
 
+# VS Code visible typing tool (Step 5)
+pyautogui>=0.9.54       # keyboard shortcuts (Ctrl+S, Ctrl+V) and FAILSAFE mouse corner abort
+pygetwindow>=0.0.9      # find and activate VS Code window by title
+pyperclip>=1.8.2        # clipboard read/write for multi-line code paste (avoids auto-indent issues)
