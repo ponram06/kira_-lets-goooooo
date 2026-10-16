@@ -109,13 +109,14 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
             try:
                 line = sys.stdin.readline()
                 if not line:
-                    loop.call_soon_threadsafe(user_queue.put_nowait, ("typed", "exit", None))
-                    break
+                    # In Windows console, empty read is not EOF; sleep briefly and continue
+                    time.sleep(0.1)
+                    continue
                 text = line.strip()
                 if text:
                     loop.call_soon_threadsafe(user_queue.put_nowait, ("typed", text, None))
             except Exception:
-                break
+                time.sleep(0.1)
 
     stdin_thread = threading.Thread(target=stdin_worker, daemon=True)
     stdin_thread.start()
