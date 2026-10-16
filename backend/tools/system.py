@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import urllib.parse
 import webbrowser
@@ -90,7 +91,17 @@ def open_app(
     if clean_name not in allowed:
         return f"Error: Application '{app_name}' is not in the allow-list."
 
-    cmd: list[str] = [clean_name]
+    exec_bin = clean_name
+    if clean_name == "code":
+        resolved_code = shutil.which("code.cmd") or shutil.which("code.exe") or shutil.which("code")
+        if resolved_code:
+            exec_bin = resolved_code
+        elif os.name == "nt":
+            appdata_code = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd")
+            if os.path.isfile(appdata_code):
+                exec_bin = appdata_code
+
+    cmd: list[str] = [exec_bin]
 
     # explorer and code: target path MUST be inside workspace/
     if clean_name in ("code", "explorer"):

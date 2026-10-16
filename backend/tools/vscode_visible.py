@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -55,6 +56,26 @@ def _load_tool_config(config_path: Path = _DEFAULT_CONFIG) -> dict:
             return cfg.get("tools", {})
     except Exception:
         return {}
+
+
+def find_vscode_binary() -> str:
+    """Find the full path or resolved command for VS Code on Windows / POSIX."""
+    for candidate in ("code.cmd", "code.exe", "code"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    std_paths = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft VS Code\bin\code.cmd"),
+        os.path.expandvars(r"%ProgramFiles%\Microsoft VS Code\Code.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft VS Code\bin\code.cmd"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft VS Code\Code.exe"),
+    ]
+    for p in std_paths:
+        if os.path.isfile(p):
+            return p
+    return "code.cmd" if os.name == "nt" else "code"
 
 
 def is_vscode_window_active(filename: str) -> bool:
@@ -168,11 +189,12 @@ def open_in_vscode(
     type_interval = float(cfg_tools.get("type_interval", 0.04))
 
     # 4. Launch VS Code with folder and file
-    cmd = ["code", str(resolved_folder), str(resolved_file)]
+    code_bin = find_vscode_binary()
+    cmd = [code_bin, str(resolved_folder), str(resolved_file)]
     try:
         subprocess.Popen(cmd, shell=False)
     except Exception as exc:
-        return f"Error: Failed to launch VS Code ('code' command): {exc}"
+        return f"Error: Failed to launch VS Code ('{code_bin}' command): {exc}"
 
     # 5. Wait for the real VS Code window to appear
     win = wait_for_vscode_window(file_name, timeout=window_timeout)
