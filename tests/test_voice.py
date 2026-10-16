@@ -48,6 +48,7 @@ from backend.voice import (
     check_local_model_available,
     clean_spoken_text,
     normalize_utterance,
+    parse_hotkey_spec,
     prepare_local_model,
     shared_confirm,
     split_into_sentences,
@@ -386,6 +387,51 @@ def test_emergency_kill_hotkey(voice_config):
     vm._on_press(k_key)
     assert KILL_SWITCH.is_stopped()
     vm.tts.stop.assert_called_once()
+
+
+def test_parse_hotkey_spec_aliases():
+    from pynput import keyboard
+
+    assert parse_hotkey_spec("F9") == keyboard.Key.f9
+    assert parse_hotkey_spec("`") == keyboard.KeyCode.from_char("`")
+    assert parse_hotkey_spec("backtick") == keyboard.KeyCode.from_char("`")
+    assert parse_hotkey_spec("grave") == keyboard.KeyCode.from_char("`")
+    assert parse_hotkey_spec("tilde") == keyboard.KeyCode.from_char("~")
+    assert parse_hotkey_spec("~") == keyboard.KeyCode.from_char("~")
+
+
+def test_voice_manager_backtick_hotkey(voice_config):
+    from pynput import keyboard
+
+    cfg = dict(voice_config)
+    cfg["voice"] = dict(voice_config["voice"])
+    cfg["voice"]["hotkey"] = "`"
+
+    vm = VoiceManager(cfg)
+    assert getattr(vm.talk_key, "char", None) == "`"
+
+    # Direct KeyCode match
+    assert vm._is_talk_key(keyboard.KeyCode.from_char("`"))
+    # KeyCode with VK 192 (Windows OEM_3)
+    assert vm._is_talk_key(keyboard.KeyCode(vk=192, char="`"))
+    assert vm._is_talk_key(keyboard.KeyCode.from_vk(192))
+    # Non-matching key
+    assert not vm._is_talk_key(keyboard.KeyCode.from_char("a"))
+    assert not vm._is_talk_key(keyboard.Key.f9)
+
+    # Press backtick starts recording
+    with patch.object(vm, "_start_recording") as mock_start, patch.object(vm, "stop_speech") as mock_stop:
+        vm._on_press(keyboard.KeyCode.from_char("`"))
+        assert vm._talk_key_held is True
+        mock_start.assert_called_once()
+        mock_stop.assert_called_once()
+
+    # Release backtick stops recording
+    vm._is_recording = True
+    with patch.object(vm, "_stop_recording", return_value=(None, 0.1, time.monotonic())) as mock_stop_rec:
+        vm._on_release(keyboard.KeyCode.from_char("`"))
+        assert vm._talk_key_held is False
+        mock_stop_rec.assert_called_once()
 
 
 # =============================================================================
