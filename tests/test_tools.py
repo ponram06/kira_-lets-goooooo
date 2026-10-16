@@ -36,6 +36,7 @@ import backend.policy as policy_module
 from backend.policy import KILL_SWITCH, PolicyError, TOOL_REGISTRY
 from backend.tools import KIRA_TOOLS_SCHEMA, TOOL_FUNCTIONS
 from backend.tools.execution import (
+    _get_pause_seconds,
     has_shell_metachars,
     is_command_allowlisted,
     run_command,
@@ -256,3 +257,16 @@ def test_tool_schemas_match_tool_registry():
         fn_name = item["function"]["name"]
         assert fn_name in TOOL_REGISTRY, f"Schema tool '{fn_name}' not in TOOL_REGISTRY"
         assert fn_name in TOOL_FUNCTIONS, f"Schema tool '{fn_name}' has no registered function"
+
+
+def test_cmd_pause_seconds(tmp_path: Path):
+    """Test reading cmd_pause_seconds from config and falling back gracefully."""
+    # Custom config with 15s pause
+    cfg_file = tmp_path / "custom_config.yaml"
+    cfg_file.write_text("tools:\n  cmd_pause_seconds: 15\n", encoding="utf-8")
+    assert _get_pause_seconds(cfg_file) == 15
+
+    # Non-existent config falls back to default 20s
+    missing_file = tmp_path / "nonexistent.yaml"
+    assert _get_pause_seconds(missing_file) == 20
+

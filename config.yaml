@@ -79,6 +79,8 @@ tools:
   vscode_window_timeout: 15
   # Seconds between individual keystrokes when typing code visibly
   type_interval: 0.04
+  # Seconds the visible CMD window remains open after command execution (default: 20s)
+  cmd_pause_seconds: 20
 
 # =============================================================================
 # Voice settings (Step 4)

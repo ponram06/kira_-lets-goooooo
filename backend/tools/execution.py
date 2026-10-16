@@ -77,6 +77,15 @@ def _get_allowed_commands(config_path: Path = _DEFAULT_CONFIG) -> list[str]:
         return DEFAULT_ALLOWED_COMMANDS
 
 
+def _get_pause_seconds(config_path: Path = _DEFAULT_CONFIG) -> int:
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+            return int(cfg.get("tools", {}).get("cmd_pause_seconds", 20))
+    except Exception:
+        return 20
+
+
 def is_command_allowlisted(command_str: str, config_path: Path = _DEFAULT_CONFIG) -> bool:
     """Check if the first binary token of command_str is allowlisted."""
     try:
@@ -241,6 +250,20 @@ def run_command(
             )
             runner_py.write_text(py_content, encoding="utf-8")
 
+            pause_sec = _get_pause_seconds(config_path)
+            if pause_sec <= 0:
+                pause_snippet = (
+                    "echo   [Done] Press any key to close this window...\r\n"
+                    "echo ====================================================\r\n"
+                    "pause > nul\r\n"
+                )
+            else:
+                pause_snippet = (
+                    f"echo   [Done] Window will close in {pause_sec} seconds (or close now with Ctrl+C)...\r\n"
+                    "echo ====================================================\r\n"
+                    f"ping 127.0.0.1 -n {pause_sec + 1} > nul\r\n"
+                )
+
             bat_content = (
                 "@echo off\r\n"
                 f'title Kira - Executing: {command}\r\n'
@@ -252,9 +275,7 @@ def run_command(
                 f'"{sys.executable}" "{runner_py}"\r\n'
                 "echo.\r\n"
                 "echo ====================================================\r\n"
-                "echo   [Done] Window will close in 5 seconds...\r\n"
-                "echo ====================================================\r\n"
-                "ping 127.0.0.1 -n 6 > nul\r\n"
+                f"{pause_snippet}"
             )
             runner_bat.write_text(bat_content, encoding="utf-8")
 
@@ -275,16 +296,17 @@ def run_command(
                     shell=False,
                 )
 
-        # 6. Monitor process with 30s timeout and kill switch checks
+        # 6. Monitor process with timeout and kill switch checks
+        effective_timeout = timeout_seconds + (pause_sec if should_open_window else 0)
         start_time = time.monotonic()
         while proc.poll() is None:
             if KILL_SWITCH.is_stopped():
                 _terminate_process(proc)
                 return "Execution halted: Kill switch was activated during command execution."
 
-            if time.monotonic() - start_time > timeout_seconds:
+            if time.monotonic() - start_time > effective_timeout:
                 _terminate_process(proc)
-                return f"Error: Command timed out after {timeout_seconds} seconds."
+                return f"Error: Command timed out after {effective_timeout} seconds."
 
             time.sleep(0.05)
 
