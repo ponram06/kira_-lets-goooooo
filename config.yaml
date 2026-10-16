@@ -81,7 +81,7 @@ tools:
 # =============================================================================
 voice:
   # Push-to-talk hotkey (hold to record, release to transcribe)
-  hotkey: "F9"
+  hotkey: "`"
   # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
   kill_hotkey: "ctrl+alt+k"
 
