@@ -472,7 +472,17 @@ class WebSocketServer:
         and Token authentication validation.
         """
         # 1. Validate Host header
-        host_hdr = websocket.request.headers.get("Host", "").strip().lower()
+        try:
+            host_hdrs = websocket.request.headers.get_all("Host")
+        except Exception:
+            host_hdrs = []
+
+        if len(host_hdrs) != 1:
+            logger.warning("Rejected connection with %d Host headers", len(host_hdrs))
+            await websocket.close(code=1008, reason="Invalid Host header")
+            return
+
+        host_hdr = host_hdrs[0].strip().lower()
         valid_hosts = {
             f"{self.host}:{self.port}".lower(),
             f"localhost:{self.port}".lower(),
@@ -485,24 +495,29 @@ class WebSocketServer:
             return
 
         # 2. Validate Origin header
-        origin = websocket.request.headers.get("Origin")
-        if origin:
-            origin_lower = origin.strip().lower()
-            # Browser http/https origins are unconditionally rejected
-            if origin_lower.startswith("http://") or origin_lower.startswith("https://"):
-                logger.warning("Rejected browser origin: '%s'", origin)
-                await websocket.close(code=1008, reason="Browser origins forbidden")
-                return
+        try:
+            origins = websocket.request.headers.get_all("Origin")
+        except Exception:
+            origins = []
 
-            # Check allow-listed origins
-            is_allowed = any(
-                origin_lower == ao.lower() or origin_lower.startswith(ao.lower())
-                for ao in self.allowed_origins
-            )
-            if not is_allowed:
-                logger.warning("Rejected disallowed origin: '%s'", origin)
-                await websocket.close(code=1008, reason="Disallowed origin")
-                return
+        if origins:
+            for origin in origins:
+                origin_lower = origin.strip().lower()
+                # Browser http/https origins are unconditionally rejected
+                if origin_lower.startswith("http://") or origin_lower.startswith("https://"):
+                    logger.warning("Rejected browser origin: '%s'", origin)
+                    await websocket.close(code=1008, reason="Browser origins forbidden")
+                    return
+
+                # Check allow-listed origins
+                is_allowed = any(
+                    origin_lower == ao.lower() or origin_lower.startswith(ao.lower())
+                    for ao in self.allowed_origins
+                )
+                if not is_allowed:
+                    logger.warning("Rejected disallowed origin: '%s'", origin)
+                    await websocket.close(code=1008, reason="Disallowed origin")
+                    return
 
         # 3. Check client connection limit
         if len(self._clients) >= self.max_clients:
