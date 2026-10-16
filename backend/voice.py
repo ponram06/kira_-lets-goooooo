@@ -59,6 +59,7 @@ from pynput import keyboard
 import sounddevice as sd
 
 from backend.policy import KILL_SWITCH
+from backend import events as _events
 
 logger = logging.getLogger(__name__)
 
@@ -586,56 +587,61 @@ class TTSEngine:
         first_word_spoken = False
         loop = asyncio.get_running_loop()
 
-        # Try Edge TTS pipeline first
-        edge_failed = False
-        synth_task: Optional[asyncio.Task] = asyncio.create_task(self.synthesize_sentence_edge(sentences[0]))
+        _events.publish("voice.speaking", f"Speaking: {cleaned[:60]}", {"text": cleaned[:120]})
 
-        for i, sentence in enumerate(sentences):
-            if self.is_interrupted():
-                if synth_task and not synth_task.done():
-                    synth_task.cancel()
-                break
+        try:
+            # Try Edge TTS pipeline first
+            edge_failed = False
+            synth_task: Optional[asyncio.Task] = asyncio.create_task(self.synthesize_sentence_edge(sentences[0]))
 
-            current_audio = None
-            if not edge_failed and synth_task:
-                try:
-                    current_audio = await synth_task
-                except Exception:
-                    current_audio = None
+            for i, sentence in enumerate(sentences):
+                if self.is_interrupted():
+                    if synth_task and not synth_task.done():
+                        synth_task.cancel()
+                    break
 
-            # If Edge failed on this sentence, fallback to pyttsx3
-            if current_audio is None and not self.is_interrupted():
-                edge_failed = True
+                current_audio = None
+                if not edge_failed and synth_task:
+                    try:
+                        current_audio = await synth_task
+                    except Exception:
+                        current_audio = None
 
-            if edge_failed:
-                # Use pyttsx3 fallback
-                if not first_word_spoken and speech_end_time is not None:
-                    latency = time.monotonic() - speech_end_time
-                    print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
-                    first_word_spoken = True
+                # If Edge failed on this sentence, fallback to pyttsx3
+                if current_audio is None and not self.is_interrupted():
+                    edge_failed = True
 
-                await loop.run_in_executor(
-                    None,
-                    self._speak_pyttsx3_sync,
-                    sentence,
-                    self._current_pyttsx3_stop,
-                )
-            else:
-                # Edge TTS succeeded: kick off synthesis for the next sentence concurrently
-                next_task: Optional[asyncio.Task] = None
-                if i + 1 < len(sentences) and not self.is_interrupted():
-                    next_task = asyncio.create_task(self.synthesize_sentence_edge(sentences[i + 1]))
+                if edge_failed:
+                    # Use pyttsx3 fallback
+                    if not first_word_spoken and speech_end_time is not None:
+                        latency = time.monotonic() - speech_end_time
+                        print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
+                        first_word_spoken = True
 
-                if not first_word_spoken and speech_end_time is not None:
-                    latency = time.monotonic() - speech_end_time
-                    print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
-                    first_word_spoken = True
+                    await loop.run_in_executor(
+                        None,
+                        self._speak_pyttsx3_sync,
+                        sentence,
+                        self._current_pyttsx3_stop,
+                    )
+                else:
+                    # Edge TTS succeeded: kick off synthesis for the next sentence concurrently
+                    next_task: Optional[asyncio.Task] = None
+                    if i + 1 < len(sentences) and not self.is_interrupted():
+                        next_task = asyncio.create_task(self.synthesize_sentence_edge(sentences[i + 1]))
 
-                if current_audio:
-                    pcm_data, sr = current_audio
-                    await self.play_pcm(pcm_data, sr)
+                    if not first_word_spoken and speech_end_time is not None:
+                        latency = time.monotonic() - speech_end_time
+                        print(f"\n[Voice latency]: End of speech to first spoken word: {latency:.2f}s (target <3s)")
+                        first_word_spoken = True
 
-                synth_task = next_task
+                    if current_audio:
+                        pcm_data, sr = current_audio
+                        await self.play_pcm(pcm_data, sr)
+
+                    synth_task = next_task
+        finally:
+            _events.publish("voice.done", "Voice playback finished", {"interrupted": self.is_interrupted()})
 
 
 def check_local_model_available(model_name: str = "small") -> bool:
@@ -837,6 +843,11 @@ class VoiceManager:
                 return
 
             self._start_recording()
+            _events.publish(
+                "voice.listening",
+                f"Listening (hold {self.ptt_hotkey_name})...",
+                {"hotkey": self.ptt_hotkey_name},
+            )
             print(f"\n[Kira listening... (hold {self.ptt_hotkey_name}, release to send)]")
 
     def _on_release(self, key: Any) -> None:
@@ -852,6 +863,11 @@ class VoiceManager:
                 audio_np, duration, speech_end_time = self._stop_recording()
                 if audio_np is not None and duration >= self.min_duration:
                     print(f"\n[Processing speech ({duration:.1f}s)...]", flush=True)
+                    _events.publish(
+                        "voice.processing",
+                        f"Processing audio ({duration:.1f}s)...",
+                        {"duration": round(duration, 2)},
+                    )
                     if self._loop and self._loop.is_running():
                         fut = asyncio.run_coroutine_threadsafe(
                             self.handle_recorded_audio(audio_np, duration, speech_end_time),
