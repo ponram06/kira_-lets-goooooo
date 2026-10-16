@@ -1,0 +1,16 @@
+{
+  "name": "kira-avatar",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/avatar.test.js"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "electron": "44.5.1"
+  }
+}

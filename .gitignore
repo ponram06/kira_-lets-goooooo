@@ -47,4 +47,7 @@ workspace/*
 .kira/
 .kira_token
 
-
+# Avatar (Step 7)
+avatar/node_modules/
+avatar/dist/
+avatar/assets/ryuk*.png
