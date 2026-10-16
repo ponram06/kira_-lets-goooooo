@@ -43,3 +43,8 @@ workspace/*
 *.aac
 .tmp_*
 
+# Ephemeral runtime tokens (Step 6)
+.kira/
+.kira_token
+
+

@@ -24,3 +24,7 @@ faster-whisper>=1.0.0
 pyautogui>=0.9.54       # keyboard shortcuts (Ctrl+S, Ctrl+V) and FAILSAFE mouse corner abort
 pygetwindow>=0.0.9      # find and activate VS Code window by title
 pyperclip>=1.8.2        # clipboard read/write for multi-line code paste (avoids auto-indent issues)
+
+# WebSocket server (Step 6)
+websockets==17.2        # lightweight asyncio WebSocket server for live avatar feed
+
