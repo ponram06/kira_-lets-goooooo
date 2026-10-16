@@ -122,3 +122,30 @@ voice:
     privacy_notice: "Audio may be sent to Groq for speech recognition."
 
 
+
+# =============================================================================
+# WebSocket server settings (Step 6)
+# Live action and avatar feed for desktop frontend (Electron / scripts)
+# =============================================================================
+server:
+  # Enable the background WebSocket server
+  enabled: true
+  # Must bind to 127.0.0.1 only (local loopback)
+  host: "127.0.0.1"
+  port: 8765
+  # Ephemeral auth token location (stored outside workspace, never committed)
+  token_file: ".kira/token"
+  # Max simultaneous connected clients
+  max_clients: 5
+  # Max incoming frame size in bytes (4 KB limit)
+  max_message_size: 4096
+  # Max incoming messages per second per client
+  inbound_rate_limit: 20
+  # Outbound loudness events per second
+  loudness_rate_limit: 20
+  # Allowed origins: "null" and file:// require valid token; web http(s) always rejected
+  allowed_origins:
+    - "null"
+    - "file://"
+    - "vscode-webview://"
+    - "electron://"
