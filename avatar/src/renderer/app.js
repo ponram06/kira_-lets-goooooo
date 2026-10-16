@@ -71,6 +71,7 @@
   });
 
   dragHandle.addEventListener('pointermove', (e) => {
+    e.preventDefault();
     if (!isDragging) return;
     const dx = e.screenX - lastScreenX;
     const dy = e.screenY - lastScreenY;

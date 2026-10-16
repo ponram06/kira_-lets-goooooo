@@ -31,6 +31,10 @@ const {
 } = require('../shared/bounds');
 const { buildHitMask, isMaskNonEmpty } = require('../shared/hitmask');
 
+// Disable all touch/trackpad pinch-to-zoom gestures at Chromium engine level
+app.commandLine.appendSwitch('disable-pinch');
+app.commandLine.appendSwitch('disable-features', 'TouchpadPinch,TouchpadAndWheelScrollLatching');
+
 // Register custom scheme as standard, secure, and supportFetchAPI before app is ready
 protocol.registerSchemesAsPrivileged([
   {
@@ -207,6 +211,11 @@ function createWindow() {
     y: initialPos.y,
     width: winWidth,
     height: winHeight,
+    minWidth: winWidth,
+    maxWidth: winWidth,
+    minHeight: winHeight,
+    maxHeight: winHeight,
+    useContentSize: true,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -350,7 +359,14 @@ function setupIpcHandlers() {
     const [currentX, currentY] = mainWindow.getPosition();
     const newX = currentX + (Number(delta.dx) || 0);
     const newY = currentY + (Number(delta.dy) || 0);
-    mainWindow.setPosition(Math.round(newX), Math.round(newY));
+    const winWidth = config.window?.width || 380;
+    const winHeight = config.window?.height || 310;
+    mainWindow.setBounds({
+      x: Math.round(newX),
+      y: Math.round(newY),
+      width: winWidth,
+      height: winHeight
+    });
   });
 
   ipcMain.on('avatar:drag-end', (event) => {
@@ -360,12 +376,18 @@ function setupIpcHandlers() {
     if (!mainWindow) return;
 
     const [currentX, currentY] = mainWindow.getPosition();
-    const [width, height] = mainWindow.getSize();
+    const winWidth = config.window?.width || 380;
+    const winHeight = config.window?.height || 310;
     const allDisplays = screen.getAllDisplays();
-    const currentDisplay = findDisplayForWindow(currentX, currentY, width, height, allDisplays) || screen.getPrimaryDisplay();
+    const currentDisplay = findDisplayForWindow(currentX, currentY, winWidth, winHeight, allDisplays) || screen.getPrimaryDisplay();
 
-    const clamped = clampToBounds(currentX, currentY, width, height, currentDisplay.workArea);
-    mainWindow.setPosition(clamped.x, clamped.y);
+    const clamped = clampToBounds(currentX, currentY, winWidth, winHeight, currentDisplay.workArea);
+    mainWindow.setBounds({
+      x: clamped.x,
+      y: clamped.y,
+      width: winWidth,
+      height: winHeight
+    });
     saveBounds(clamped);
 
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
