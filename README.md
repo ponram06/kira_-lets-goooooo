@@ -275,6 +275,71 @@ Step 6 provides a lightweight, pure-asyncio WebSocket server for live action fee
 
 ---
 
+## Desktop Avatar Window (`avatar/`, Electron)
+
+Step 7 implements a lightweight, transparent 2D desktop avatar window featuring Ryuk (or custom sprite) with responsive animations driven by the Kira WebSocket event stream.
+
+### Architecture & Security Highlights
+- **Transparent & Frameless**: Electron frameless window with `transparent: true`, `alwaysOnTop: true`, and `skipTaskbar: true`.
+- **Zero Focus Stealing**: Configured with `focusable: false` and displayed via `showInactive()`. Dragging the character or clicking the speech bubble **never interrupts active typing** in VS Code or terminals.
+- **Dynamic Click-Through**: Transparent pixel regions use `setIgnoreMouseEvents(true, { forward: true })`. Hovering over interactive elements (hover menu, speech bubble, or the solid character body via precomputed 1-bit alpha hit-mask) immediately activates click capture.
+- **Main-Process WebSocket Isolation**: The WebSocket connection runs exclusively in the Electron **Main Process**, re-reading `.kira/token` from disk on each connection attempt with exponential backoff and jitter. The renderer never sees credentials or auth tokens; events pass strictly over a hardened, context-isolated IPC bridge.
+- **2D Canvas Renderer**: 30 FPS capped canvas loop rendering breathing, leaning, apple/eye radial glows, and mouth bobbing synchronized to backend speech loudness.
+- **Speech Bubble**: Dark rounded speech bubble with thin red border and monospace typography. Enforces text-only output (`textContent`, strictly no `innerHTML`), 140-character maximum truncation with ellipsis, and a 3-second auto-fade timer.
+- **Mode Indicator Ring**: Displays mode aura (Blue for `RESTRICTED`, Red for `FREE`). Character maintains its native amber/red glow and is never tinted blue.
+- **System Tray & Kill Switch**: System tray icon with Show/Hide, Lock Position, and Quit controls. A dedicated **Stop** button in the hover menu and tray triggers the global emergency kill switch.
+
+### Custom Character Assets & Glow Configuration
+- Put your character sprite at `avatar/assets/ryuk.png` (git-ignored). If absent, a neutral geometric placeholder is rendered.
+- Optional speaking sprite: `avatar/assets/ryuk_mouth_open.png` (swapped automatically when loudness exceeds threshold).
+- Tune eye and apple radial glow positions and colors in `avatar/avatar.config.json` without modifying code.
+
+### Installation & Dependency Verification
+```powershell
+cd avatar
+npm ci
+npm audit
+```
+
+### Running Unit Tests
+```powershell
+cd avatar
+npm test
+```
+Runs 22 pure unit tests covering the state machine, loudness smoothing, schema compliance, multi-monitor bounds clamping, speech bubble sanitization, and alpha hit-mask generation via Node.js native `node:test`.
+
+### Quick Manual Testing with Mock Server
+To test all avatar animations and interactions in isolation without running LLMs:
+
+1. In **Terminal 1**, start the mock WebSocket server:
+   ```powershell
+   .venv\Scripts\python.exe scripts/mock_server.py
+   ```
+2. In **Terminal 2**, launch the Electron Avatar:
+   ```powershell
+   cd avatar
+   npm start
+   ```
+3. Observe:
+   - Initial greeting bubble appears from `avatar.config.json` and auto-fades after 3 seconds.
+   - Character smoothly transitions through states: `idle` (breathing) -> `listening` (forward tilt, brighter eye glow) -> `thinking` (apple glow pulse) -> `working` (fast apple pulse and sway) -> `speaking` (speech bubble appears, character bobs with audio loudness).
+   - Click the gear icon to open the hover menu; click **Stop** and observe immediate kill switch activation in Terminal 1.
+   - Drag the character to any screen corner or secondary monitor. Release to verify bounds clamping.
+   - Click outside the character in an open editor window to verify clicks pass through seamlessly.
+
+### Running with Full Kira Voice Assistant
+1. In **Terminal 1**, start Kira:
+   ```powershell
+   .venv\Scripts\python.exe -m backend.brain
+   ```
+2. In **Terminal 2**, launch the avatar:
+   ```powershell
+   cd avatar
+   npm start
+   ```
+
+---
+
 ## Known Limits & Safety Notes
 
 1. **VS Code PATH**: VS Code must be installed with the `code` CLI tool available on system `PATH`.
@@ -287,21 +352,29 @@ Step 6 provides a lightweight, pure-asyncio WebSocket server for live action fee
 
 ## Automated Test Suite
 
-Run the full automated test suite (**162 unit tests**, all offline/mocked):
+Run the full automated test suite:
 
+### Python Backend Suite (**163 unit tests**, all offline/mocked):
 ```powershell
-.venv\Scripts\pytest -v
+.venv\Scripts\python.exe -m pytest -v
 ```
 
-### Test Breakdown by Module:
 * `tests/test_agent.py`: 14 passed (agent loop, max steps, retry limits)
 * `tests/test_events.py`: 6 passed (event pub/sub, ordering, secret stripping, restricted demo)
-* `tests/test_policy.py`: 47 passed, 1 skipped (permission modes, boundaries, kill switch)
+* `tests/test_policy.py`: 48 passed, 1 skipped (permission modes, boundaries, kill switch, persona independence)
 * `tests/test_providers.py`: 16 passed (provider fallback chain, cooldowns)
 * `tests/test_tools.py`: 19 passed (filesystem, run_command, open_app, open_website, cmd pause)
 * `tests/test_voice.py`: 25 passed (STT, TTS, sentence pipelining, hotkeys, shared confirm)
 * `tests/test_vscode_visible.py`: 8 passed (window wait, save verify, active window guard, fail-safe)
 * `tests/test_server.py`: 17 passed (token auth, origin/host checks, confirm question_id, slow client drop, throttling)
 
-Total: **162 passed, 1 skipped (100% green)**.
+### Electron Avatar Suite (**22 unit tests**, node:test runner):
+```powershell
+cd avatar
+npm test
+```
+
+* `avatar/tests/avatar.test.js`: 22 passed (state machine, loudness EMA, backend schema, bounds clamping, bubble sanitization, alpha hit-mask)
+
+Total: **185 tests passed (100% green)**.
 
