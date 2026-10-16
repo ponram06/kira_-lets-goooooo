@@ -314,6 +314,7 @@ class ModeManager:
             logger.info(
                 "Entered Free mode — auto-revert in %d s.", self._free_timeout
             )
+            self._publish_mode_change(Mode.FREE, "user_confirmed")
             return True
 
     def enter_restricted(self) -> None:
@@ -322,6 +323,7 @@ class ModeManager:
             self._cancel_timer()
             self._mode = Mode.RESTRICTED
             logger.info("Switched to Restricted mode.")
+            self._publish_mode_change(Mode.RESTRICTED, "user_request")
 
     def notify_provider(self, provider_name: Optional[str]) -> None:
         """
@@ -344,8 +346,21 @@ class ModeManager:
                         "Ollama is answering — forced Restricted mode, "
                         "screen control disabled."
                     )
+                    self._publish_mode_change(Mode.RESTRICTED, "ollama_forced")
 
     # ── internal helpers ─────────────────────────────────────────────────────
+
+    def _publish_mode_change(self, mode: Mode, reason: str) -> None:
+        """Emit mode.change event to event bus without raising on error."""
+        try:
+            from backend import events as _events
+            _events.publish(
+                "mode.change",
+                f"Mode changed to {mode.value.upper()} ({reason})",
+                {"mode": mode.value, "reason": reason},
+            )
+        except Exception as exc:
+            logger.debug("Failed to publish mode.change event: %s", exc)
 
     @staticmethod
     def _terminal_confirm() -> bool:
@@ -374,6 +389,7 @@ class ModeManager:
         with self._lock:
             self._mode = Mode.RESTRICTED
             logger.info("Free mode timed out — auto-reverted to Restricted.")
+            self._publish_mode_change(Mode.RESTRICTED, "timeout")
 
 
 # ---------------------------------------------------------------------------
