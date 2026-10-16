@@ -83,7 +83,7 @@ function computeAnimation(state, timeSec, smoothedLoudness = 0.0) {
     case 'speaking': {
       // Bob and glow follow loudness
       const bob = Math.min(1.0, Math.max(0.0, smoothedLoudness));
-      offsetY = -bob * 6.0;
+      offsetY = (-bob * 6.0) || 0.0;
       scaleY = 1.0 + bob * 0.04;
       eyeGlow = 1.0 + bob * 0.5;
       appleGlow = 1.0 + bob * 0.6;
