@@ -4,7 +4,15 @@
  * Node integration is disabled; credentials are never exposed to renderer.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Hard lock visual zoom limits at Chromium webFrame level
+try {
+  webFrame.setVisualZoomLevelLimits(1, 1);
+  webFrame.setZoomFactor(1.0);
+} catch {
+  // WebFrame locked
+}
 
 contextBridge.exposeInMainWorld('kiraAvatar', {
   getConfig: () => ipcRenderer.invoke('avatar:get-config'),

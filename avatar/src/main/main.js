@@ -238,8 +238,14 @@ function createWindow() {
   });
 
   // Strictly disable all webContents zoom (prevents clicking or gestures from zooming)
-  mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
-  mainWindow.webContents.setZoomFactor(1.0);
+  try {
+    if (typeof mainWindow.webContents.setVisualZoomLevelLimits === 'function') {
+      mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
+    }
+    if (typeof mainWindow.webContents.setZoomFactor === 'function') {
+      mainWindow.webContents.setZoomFactor(1.0);
+    }
+  } catch {}
   mainWindow.webContents.on('zoom-changed', () => {
     mainWindow.webContents.setZoomLevel(0);
   });

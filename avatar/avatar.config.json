@@ -1,7 +1,7 @@
 {
   "window": {
-    "width": 480,
-    "height": 420,
+    "width": 380,
+    "height": 310,
     "margin_right": 20,
     "margin_bottom": 20
   },
@@ -9,28 +9,28 @@
   "greeting": "Hey... Need anything?",
   "glow": {
     "eye": {
-      "x": 296,
-      "y": 167,
-      "radius": 14,
+      "x": 258,
+      "y": 120,
+      "radius": 10,
       "color": "rgba(255, 180, 20, 0.75)"
     },
     "apple": {
-      "x": 213,
-      "y": 161,
-      "radius": 24,
+      "x": 201,
+      "y": 115,
+      "radius": 18,
       "color": "rgba(255, 30, 30, 0.85)"
     }
   },
   "character": {
-    "x": 160,
-    "y": 80,
-    "width": 300,
-    "height": 320
+    "x": 165,
+    "y": 60,
+    "width": 205,
+    "height": 220
   },
   "bubble": {
     "x": 10,
-    "y": 40,
-    "max_width": 220,
+    "y": 35,
+    "max_width": 170,
     "fade_delay_ms": 3000
   },
   "connection": {
