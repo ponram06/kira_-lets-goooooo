@@ -139,8 +139,8 @@ To manually verify the complete voice pipeline on Windows:
 
 ### Test 1: Push-to-Talk Speech & Narration
 1. Run `python -m backend.brain`.
-2. Hold **`F9`** and say: `"What is the capital of France?"`.
-3. Release **`F9`**.
+2. Hold **`F8`** (or configured hotkey) and say: `"What is the capital of France?"`.
+3. Release **`F8`**.
 4. **Verify**:
    - Terminal prints `\nYou [voice]: What is the capital of France?`
    - Terminal displays `[Voice latency]: End of speech to first spoken word: ... (<3s)`.
@@ -148,7 +148,7 @@ To manually verify the complete voice pipeline on Windows:
 
 ### Test 2: Instant Interruption via PTT or Stop Word
 1. Ask Kira a long question (e.g. `"Explain how gravity works in 5 sentences"`).
-2. While Kira is speaking, press **`F9`** or say **`"stop"`**.
+2. While Kira is speaking, press **`F8`** or say **`"stop"`**.
 3. **Verify**: Audio playback stops immediately within a fraction of a second. Saying `"stop"` activates the kill switch.
 
 ### Test 3: Emergency Kill Hotkey (Ctrl+Alt+K)
@@ -157,7 +157,7 @@ To manually verify the complete voice pipeline on Windows:
    `[EMERGENCY KILL SWITCH: Ctrl+Alt+K pressed. All actions and audio halted.]`
 
 ### Test 4: Voice Free Mode Refusal
-1. Hold **`F9`** and say: `"free mode"`.
+1. Hold **`F8`** and say: `"free mode"`.
 2. **Verify**: Kira refuses via speech and terminal:
    `"Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."`
    Mode remains `RESTRICTED`.
@@ -165,22 +165,75 @@ To manually verify the complete voice pipeline on Windows:
 ### Test 5: Spoken Read-Back & Confirmation
 1. Ask Kira to perform an action outside allowlist requiring confirmation.
 2. **Verify**: Kira reads back the confirmation request out loud. The 10-second timer starts after speech finishes.
-3. Hold **`F9`** and say: `"yes"`.
+3. Hold **`F8`** and say: `"yes"`.
 4. **Verify**: The action is approved and proceeds.
+
+---
+
+## Canonical Demo Flow
+
+Run the automated one-click demo for the canonical `AGENTS.md` scenario:
+
+```powershell
+python -m backend.demo
+```
+
+### Scenario Executed:
+> *"Open VS Code, create a folder called demo, make hello.py with hello world, and run it."*
+
+### What you will observe on screen:
+1. **Workspace Setup**: Kira creates `workspace/demo/` and empty `workspace/demo/hello.py`.
+2. **VS Code Launch & Focus**: VS Code opens on `workspace/demo/` and focuses the window.
+3. **Visible Typing & Security Guard**:
+   - Push-to-talk microphone is paused during typing.
+   - Foreground window title is verified to match VS Code and `hello.py` before every keystroke batch.
+   - Code `print('Hello, World!')` is typed visibly into the editor.
+   - `Ctrl+S` saves the file and disk contents are verified.
+4. **Visible CMD Execution**:
+   - A standalone Windows CMD window opens in `workspace/demo/`.
+   - `python hello.py` runs with output visible in the console.
+   - Pauses 5 seconds for observation with formatted Kira status banners.
+5. **Narration & Result**:
+   - Kira speaks out loud via Edge TTS:
+     `"Here is the output in the terminal: Hello, World!"`
+
+---
+
+## Event Bus (`backend/events.py`)
+
+Kira features an in-process, thread-safe pub/sub event bus:
+- **Event Types**: `agent.step_start`, `agent.step_done`, `tool.start`, `tool.done`, `policy.decision`, `mode.change`, `voice.listening`, `voice.processing`, `voice.speaking`, `voice.done`.
+- **Zero Secrets**: Sensitive keys (`key`, `token`, `secret`, `password`) are automatically stripped.
+- **Replay Logging**: All events are appended to `logs/events.jsonl` (covered in `.gitignore`).
+- **Coexistence**: Runs alongside `backend/audit.py` without breaking existing action logs.
+
+---
+
+## Known Limits & Safety Notes
+
+1. **VS Code PATH**: VS Code must be installed with the `code` CLI tool available on system `PATH`.
+2. **PyAutoGUI Fail-Safe**: Moving the mouse to any screen corner immediately triggers `pyautogui.FailSafeException` and aborts all typing.
+3. **Window Focus Verification**: If VS Code loses foreground focus or another window covers it, typing is aborted immediately to ensure keystrokes never leak into other applications.
+4. **Ollama Screen Control Restriction**: When running on local Ollama models, Restricted mode is forced and screen control automation is disabled.
+5. **Clipboard Paste**: Multi-line code uses `pyperclip` paste (`Ctrl+V`) to avoid VS Code auto-indent and auto-bracket mangling; previous clipboard contents are restored immediately afterward.
 
 ---
 
 ## Automated Test Suite
 
-Run the full automated test suite (130 unit tests, all offline/mocked):
+Run the full automated test suite (**144 unit tests**, all offline/mocked):
 
 ```powershell
 .venv\Scripts\pytest -v
 ```
 
-Run Step 4 voice tests only:
+### Test Breakdown by Module:
+* `tests/test_agent.py`: 14 passed (agent loop, max steps, retry limits)
+* `tests/test_events.py`: 6 passed (event pub/sub, ordering, secret stripping, restricted demo)
+* `tests/test_policy.py`: 47 passed, 1 skipped (permission modes, boundaries, kill switch)
+* `tests/test_providers.py`: 16 passed (provider fallback chain, cooldowns)
+* `tests/test_tools.py`: 18 passed (filesystem, run_command, open_app, open_website)
+* `tests/test_voice.py`: 25 passed (STT, TTS, sentence pipelining, hotkeys)
+* `tests/test_vscode_visible.py`: 8 passed (window wait, save verify, active window guard, fail-safe)
 
-```powershell
-.venv\Scripts\pytest tests/test_voice.py -v
-```
-Expected: **25 passed in ~1.5s**.
+Total: **144 passed, 1 skipped (100% green)**.
