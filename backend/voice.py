@@ -36,10 +36,12 @@ from dataclasses import dataclass
 import io
 import logging
 import os
+import queue
 import re
 import sys
 import threading
 import time
+import uuid
 import wave
 from typing import Any, Callable, Optional
 
@@ -1005,23 +1007,60 @@ class VoiceManager:
             return None
 
 
+# Thread-safe external confirmation state (WebSocket, etc.)
+_active_confirm_lock = threading.Lock()
+_active_confirm_question_id: Optional[str] = None
+_active_confirm_queue: Optional[Any] = None
+
+
+def register_confirmation_response(question_id: str, source: str, answer: str) -> bool:
+    """
+    Submit a confirmation response from an external channel (e.g. WebSocket).
+
+    Returns True if accepted (question_id matches the active pending prompt),
+    False if stale, mismatched, or no question is active.
+    """
+    with _active_confirm_lock:
+        if _active_confirm_queue is None or _active_confirm_question_id is None:
+            logger.debug("Confirmation received with no active question: %s", answer)
+            return False
+        if _active_confirm_question_id != question_id:
+            logger.warning(
+                "Stale or mismatched confirmation question_id: got '%s', expected '%s'",
+                question_id,
+                _active_confirm_question_id,
+            )
+            return False
+        _active_confirm_queue.put((source, answer))
+        return True
+
+
+def get_active_question_id() -> Optional[str]:
+    """Return the currently pending confirmation question_id, or None if idle."""
+    with _active_confirm_lock:
+        return _active_confirm_question_id
+
+
 def shared_confirm(
     prompt_text: str,
     voice_manager: Optional[VoiceManager] = None,
     timeout_seconds: float = 10.0,
 ) -> bool:
     """
-    Shared confirmation gate supporting both typed and spoken responses.
+    Shared confirmation gate supporting typed, spoken, and WebSocket responses.
     First response wins.
 
     Rules
     -----
     - Kira reads back the action out loud first.
     - The 10-second timer begins AFTER Kira finishes speaking.
+    - Generates a unique random question_id and publishes a policy.ask event.
+    - External (WebSocket) answers must supply matching question_id.
     - Only an explicit fresh 'yes' or 'y' counts as approval.
     - Anything else or no answer (timeout) means 'no' (declined).
     """
-    import queue
+    global _active_confirm_question_id, _active_confirm_queue
+    question_id = uuid.uuid4().hex[:8]
 
     # 1. Read-back narration (TTS) before starting timer
     read_back = f"Confirmation required. {prompt_text}. Do you approve? Say or type yes to proceed."
@@ -1040,6 +1079,17 @@ def shared_confirm(
             logger.debug("Read-back TTS error: %s", exc)
 
     result_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+
+    with _active_confirm_lock:
+        _active_confirm_question_id = question_id
+        _active_confirm_queue = result_queue
+
+    # Publish policy.ask event for WebSocket clients and logs
+    _events.publish(
+        "policy.ask",
+        f"Confirmation required: {prompt_text}",
+        {"question_id": question_id, "prompt": prompt_text},
+    )
 
     # 2. Hook voice utterance callback during confirmation window
     previous_callback = voice_manager.on_utterance if voice_manager else None
@@ -1077,6 +1127,9 @@ def shared_confirm(
         print(f"\n[Kira]: Confirmation timed out ({timeout_seconds:.0f}s). No answer means no.\n")
         approved = False
     finally:
+        with _active_confirm_lock:
+            _active_confirm_question_id = None
+            _active_confirm_queue = None
         if voice_manager:
             voice_manager.on_utterance = previous_callback
 
