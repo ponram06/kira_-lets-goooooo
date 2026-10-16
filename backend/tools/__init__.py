@@ -12,6 +12,7 @@ from backend.tools.execution import run_command
 from backend.tools.filesystem import create_file, create_folder
 from backend.tools.system import open_app, open_website
 from backend.tools.voice_stub import speak
+from backend.tools.vscode_visible import open_in_vscode
 
 # Mapping of tool name -> callable implementation
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -21,6 +22,7 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "open_app": open_app,
     "open_website": open_website,
     "speak": speak,
+    "open_in_vscode": open_in_vscode,
 }
 
 # OpenAI-compatible function schemas
@@ -135,6 +137,31 @@ KIRA_TOOLS_SCHEMA: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_in_vscode",
+            "description": "Open VS Code on a workspace folder, type source code visibly into the file, save, and verify.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Folder or file path relative to workspace/ (e.g. 'demo' or 'demo/hello.py')",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Source code to type into the editor",
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": "Optional file name (e.g. 'hello.py') if path specifies only the directory",
+                    },
+                },
+                "required": ["path", "code"],
+            },
+        },
+    },
 ]
 
 __all__ = [
@@ -144,6 +171,7 @@ __all__ = [
     "open_app",
     "open_website",
     "speak",
+    "open_in_vscode",
     "TOOL_FUNCTIONS",
     "KIRA_TOOLS_SCHEMA",
 ]

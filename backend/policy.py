@@ -124,6 +124,11 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    "open_in_vscode": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
     "type_code": {
         "risk": RiskLevel.LOW, "allowlisted": True,
         "affects_people": False, "outside_workspace": False,
