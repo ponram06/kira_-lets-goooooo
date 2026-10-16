@@ -6,7 +6,9 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-user-drag: none;
+  touch-action: none;
 }
 
 html, body {
@@ -17,6 +19,7 @@ html, body {
   font-family: 'Consolas', 'Courier New', 'Fira Code', monospace;
   font-size: 13px;
   color: #f1f5f9;
+  touch-action: none;
 }
 
 #container {

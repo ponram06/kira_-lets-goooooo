@@ -45,7 +45,23 @@
   let lastScreenY = 0;
   let isLocked = false;
 
+  // Prevent all browser zooming (Ctrl+wheel, touch pinch, dblclick, Ctrl+/- shortcuts)
+  window.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0')) {
+      e.preventDefault();
+    }
+  });
+
+  window.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+  });
+
   dragHandle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
     if (isLocked || e.button !== 0) return;
     isDragging = true;
     lastScreenX = e.screenX;
