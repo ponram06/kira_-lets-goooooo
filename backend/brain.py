@@ -87,7 +87,8 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
     print(f"  {persona_name} — AI Dev Mentor")
     print(f"  Mode: {mode_manager.mode.value.upper()} | Type 'exit' or 'quit' to stop.")
     print("  Commands: 'restricted mode', 'free mode', 'stop', 'resume'")
-    print(f"  Voice: Push-to-Talk [{voice_manager.ptt_hotkey_name}] (hold to talk, or Fn+{voice_manager.ptt_hotkey_name} on laptops)")
+    fn_hint = f", or Fn+{voice_manager.ptt_hotkey_name}" if voice_manager.ptt_hotkey_name.lower().startswith("f") else ""
+    print(f"  Voice: Push-to-Talk [{voice_manager.ptt_hotkey_name}] (hold to talk{fn_hint})")
     print(f"  Kill: [{voice_manager.kill_hotkey_name}] | Diagnostic: python -m backend.voice --test")
     print("=" * 54)
     voice_manager.print_privacy_notice()
