@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, TextIO
@@ -70,13 +71,32 @@ def refresh() -> None:
         _cache_stamp = (-1.0, 0.0)
 
 
+def _numeric_pattern(secret: str) -> "re.Pattern[str]":
+    """Digit-only secrets (the PIN) match only as a whole number: never inside a
+    longer digit run such as a timestamp, which would mangle it and reveal the
+    PIN's digits by their position."""
+    return re.compile(r"(?<!\d)" + re.escape(secret) + r"(?!\d)")
+
+
+def secret_in_text(secret: str, text: str) -> bool:
+    """True if *secret* occurs in *text* (whole-number match for digit-only secrets)."""
+    if not secret or secret not in text:
+        return False
+    if secret.isdigit():
+        return bool(_numeric_pattern(secret).search(text))
+    return True
+
+
 def redact(text: Any) -> Any:
     """Replace known secret values inside *text*. Non-strings pass through."""
     if not isinstance(text, str) or not text:
         return text
     for secret in known_secrets():
         if secret in text:
-            text = text.replace(secret, REDACTED)
+            if secret.isdigit():
+                text = _numeric_pattern(secret).sub(REDACTED, text)
+            else:
+                text = text.replace(secret, REDACTED)
     return text
 
 
@@ -84,10 +104,7 @@ def contains_secret(text: str) -> bool:
     """Return True if text contains any known secret value."""
     if not isinstance(text, str) or not text:
         return False
-    for secret in known_secrets():
-        if secret and secret in text:
-            return True
-    return False
+    return any(secret_in_text(s, text) for s in known_secrets())
 
 
 def redact_obj(obj: Any) -> Any:

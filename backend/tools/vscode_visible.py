@@ -78,23 +78,67 @@ def find_vscode_binary() -> str:
     return "code.cmd" if os.name == "nt" else "code"
 
 
+# Process names of VS Code builds whose window may receive keystrokes.
+_VSCODE_PROCESSES = frozenset({"code.exe", "code - insiders.exe", "code", "vscodium.exe"})
+
+
+def _foreground_process_name() -> str:
+    """Lower-cased executable name of the foreground window's process ('' if unknown)."""
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+        import ctypes.wintypes
+        import psutil
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return ""
+        pid = ctypes.wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        return psutil.Process(pid.value).name() if pid.value else ""
+    except Exception as exc:
+        logger.debug("Foreground process lookup failed: %s", exc)
+        return ""
+
+
 def is_vscode_window_active(filename: str) -> bool:
     """
-    Verify whether the current foreground/active window is VS Code displaying *filename*.
-    Prevents typing keystrokes into any other application window.
+    Verify that the foreground window is VS Code showing *filename*: the title
+    must name the file and VS Code, AND (on Windows) the foreground process
+    must be VS Code itself, so a browser tab titled "hello.py ... code" never
+    receives keystrokes.
     """
     try:
         title = gw.getActiveWindowTitle()
         if not title:
             return False
         t_lower = title.lower()
-        f_lower = filename.lower()
-        has_file = f_lower in t_lower
-        has_vscode = "visual studio code" in t_lower or "code" in t_lower
-        return has_file and has_vscode
+        if filename.lower() not in t_lower:
+            return False
+        if "visual studio code" not in t_lower and "code" not in t_lower:
+            return False
+        if os.name == "nt":
+            return _foreground_process_name().lower() in _VSCODE_PROCESSES
+        return True
     except Exception as exc:
         logger.debug("Failed to query active window title: %s", exc)
         return False
+
+
+def type_visibly(code: str, filename: str, interval: float, chunk: int = 8) -> tuple[bool, str]:
+    """
+    Type *code* in small chunks, re-checking before every chunk that VS Code
+    still has focus and the kill switch is off. Stops at once otherwise, so at
+    most one chunk can land in another window. Returns (ok, error message).
+    """
+    for i in range(0, len(code), max(1, chunk)):
+        if KILL_SWITCH.is_stopped():
+            return False, "Execution halted: Kill switch was activated."
+        if not is_vscode_window_active(filename):
+            return False, f"Error: Lost foreground focus on '{filename}' while typing. Keystrokes aborted."
+        pyautogui.typewrite(code[i:i + chunk], interval=interval)
+    return True, ""
 
 
 def wait_for_vscode_window(
@@ -278,13 +322,11 @@ def open_in_vscode(
                 except Exception:
                     pass
         else:
-            # Single-line: visible character-by-character typing
-            if not is_vscode_window_active(file_name):
-                err_msg = f"Error: Lost foreground focus on '{file_name}' before typing. Keystrokes aborted."
+            # Single-line: visible typing, focus re-checked before every chunk
+            ok, err_msg = type_visibly(code, file_name, type_interval)
+            if not ok:
                 _events.publish("tool.error", err_msg, {"filename": file_name})
                 return err_msg
-
-            pyautogui.typewrite(code, interval=type_interval)
             time.sleep(0.1)
 
         # 9. Save with Ctrl+S

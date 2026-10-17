@@ -42,6 +42,36 @@ logger = logging.getLogger(__name__)
 
 MAX_OUTPUT_CHARS = 4000
 
+# Parameters each tool may receive from the model: exactly the properties
+# declared in its schema. Everything else (config_path, mode, confirm_cb,
+# rate-limit caps, visible, ...) is internal and set only by this loop.
+_SCHEMA_PARAMS: dict[str, frozenset[str]] = {
+    t["function"]["name"]: frozenset(t["function"].get("parameters", {}).get("properties", {}))
+    for t in KIRA_TOOLS_SCHEMA
+}
+# Free text that must never be written to logs or events in full.
+_PRIVATE_TEXT_ARGS: dict[str, tuple[str, ...]] = {
+    "send_whatsapp": ("text",),
+    "browser_type": ("text",),
+}
+
+
+def filter_tool_args(fn_name: str, args: Any) -> dict:
+    """Keep only the schema-declared parameters of *fn_name* from model JSON."""
+    if not isinstance(args, dict):
+        return {}
+    allowed = _SCHEMA_PARAMS.get(fn_name, frozenset())
+    return {k: v for k, v in args.items() if k in allowed}
+
+
+def loggable_args(fn_name: str, args: dict) -> dict:
+    """Public args safe for logs/events: private free text replaced by its length."""
+    out = dict(args)
+    for key in _PRIVATE_TEXT_ARGS.get(fn_name, ()):
+        if key in out:
+            out[key] = f"<{len(str(out[key]))} chars>"
+    return out
+
 
 def _terminal_confirm(prompt_text: str) -> bool:
     """Default interactive confirmation prompt via stdin."""
@@ -195,10 +225,15 @@ class AgentRunner:
                 raw_args = tc.function.arguments or "{}"
 
                 try:
-                    fn_args = json.loads(raw_args)
+                    model_args = json.loads(raw_args)
                 except Exception as exc:
-                    fn_args = {}
+                    model_args = {}
                     logger.warning("Failed to parse tool arguments: %s", exc)
+                # Only schema-declared parameters come from the model; internal
+                # ones below are injected by the loop (never trusted from JSON).
+                public_args = filter_tool_args(fn_name, model_args)
+                fn_args = dict(public_args)
+                log_args = loggable_args(fn_name, public_args)
 
                 # Command inspection for allowlisted and chaining flags
                 allowlisted_flag: Optional[bool] = None
@@ -223,7 +258,7 @@ class AgentRunner:
                 elif fn_name == "send_whatsapp":
                     if whatsapp_sent_in_task:
                         observation = "Refused: Only one WhatsApp message may be sent per request."
-                        log_action(fn_name, fn_args, "block", observation)
+                        log_action(fn_name, log_args, "block", observation)
                         _events.publish("agent.step_done", f"Step {step} done: {fn_name} → Refused", {"step": step, "tool": fn_name})
                         current_messages.append({
                             "role": "tool",
@@ -283,7 +318,7 @@ class AgentRunner:
                     elif fn_name == "open_any_app":
                         prompt = f"Kira would like to open '{fn_args.get('name')}' for the first time. Allow? (yes/no):"
                     else:
-                        prompt = f"Action '{fn_name}' requires confirmation (Mode: {self.mode_manager.mode.value}). Arguments: {fn_args}. Allow execution? (yes/no):"
+                        prompt = f"Action '{fn_name}' requires confirmation (Mode: {self.mode_manager.mode.value}). Arguments: {public_args}. Allow execution? (yes/no):"
 
                     user_ok = await self._confirm(prompt)
                     if not user_ok:
@@ -300,7 +335,7 @@ class AgentRunner:
                                     save_approval(res.match.target_path, res.match.arguments, is_store_app=False)
                         elif fn_name == "send_whatsapp":
                             fn_args["confirm_cb"] = lambda p: True
-                        observation = await self._run_tool(fn_name, fn_args)
+                        observation = await self._run_tool(fn_name, fn_args, log_args)
                 elif decision == "countdown":
                     if fn_name == "send_whatsapp":
                         from backend.whatsapp_rate_limit import is_contact_approved_free_mode, approve_contact_free_mode
@@ -309,14 +344,17 @@ class AgentRunner:
                         c_name = c_res.contact_name or fn_args.get("contact", "")
                         c_masked = c_res.masked_phone or "***"
                         if not is_contact_approved_free_mode(c_name):
-                            first_prompt = f"First message to {c_name} in Free mode requires confirmation. Allow? (yes/no):"
+                            first_prompt = (
+                                f"First message to {c_name} in Free mode. Send WhatsApp message to "
+                                f"{c_name} ({c_masked}): '{fn_args.get('text', '')}'. Allow? (yes/no):"
+                            )
                             user_ok = await self._confirm(first_prompt)
                             if not user_ok:
                                 observation = f"USER DECLINED: First message to {c_name} was not approved by user."
                             else:
                                 approve_contact_free_mode(c_name)
                                 fn_args["confirm_cb"] = lambda p: True
-                                observation = await self._run_tool(fn_name, fn_args)
+                                observation = await self._run_tool(fn_name, fn_args, log_args)
                         else:
                             if self.speak:
                                 await self.speak(f"Preparing WhatsApp message to {c_name} ({c_masked}): {fn_args.get('text', '')}.")
@@ -327,7 +365,7 @@ class AgentRunner:
                                 observation = f"CANCELLED: '{fn_name}' was cancelled during countdown."
                             else:
                                 fn_args["confirm_cb"] = lambda p: True
-                                observation = await self._run_tool(fn_name, fn_args)
+                                observation = await self._run_tool(fn_name, fn_args, log_args)
                     else:
                         print(f"\n[Free Mode Countdown] Executing '{fn_name}' in {self.countdown_seconds} seconds... Say Stop to cancel.")
                         finished = await run_countdown(
@@ -336,9 +374,9 @@ class AgentRunner:
                         if not finished:
                             observation = f"CANCELLED: '{fn_name}' was cancelled during countdown."
                         else:
-                            observation = await self._run_tool(fn_name, fn_args)
+                            observation = await self._run_tool(fn_name, fn_args, log_args)
                 elif decision == "allow":
-                    observation = await self._run_tool(fn_name, fn_args)
+                    observation = await self._run_tool(fn_name, fn_args, log_args)
                     if isinstance(observation, str) and observation.startswith("Confirmation required:"):
                         if self.speak:
                             await self.speak("I need your confirmation before proceeding with this browser action.")
@@ -348,7 +386,7 @@ class AgentRunner:
                         else:
                             fn_args_confirmed = dict(fn_args)
                             fn_args_confirmed["confirm_cb"] = lambda p: True
-                            observation = await self._run_tool(fn_name, fn_args_confirmed)
+                            observation = await self._run_tool(fn_name, fn_args_confirmed, log_args)
                 else:
                     observation = f"ERROR: Unknown policy decision '{decision}'."
 
@@ -357,7 +395,7 @@ class AgentRunner:
                 task_tool_outputs.append(str(observation))
 
                 # Log to actions.jsonl and emit event
-                log_action(fn_name, fn_args, decision, observation)
+                log_action(fn_name, log_args, decision, observation)
 
                 # Publish step done event
                 _events.publish(
@@ -387,13 +425,13 @@ class AgentRunner:
         target = fn_args.get("recipient") or fn_args.get("contact") or ""
         return f"Running {fn_name}" + (f" for {str(target)[:40]}" if target else "")
 
-    async def _run_tool(self, fn_name: str, fn_args: dict) -> str:
+    async def _run_tool(self, fn_name: str, fn_args: dict, log_args: Optional[dict] = None) -> str:
         """
         Run a tool with retries, emitting tool.start / tool.done / tool.error.
         After the automatic retries are used up, ask the user (awaited) whether
         to try one more time.
         """
-        _events.publish("tool.start", f"Running: {fn_name}", {"tool": fn_name, "args": fn_args})
+        _events.publish("tool.start", f"Running: {fn_name}", {"tool": fn_name, "args": log_args or {}})
 
         # send_whatsapp is strictly non-retriable
         if fn_name == "send_whatsapp":

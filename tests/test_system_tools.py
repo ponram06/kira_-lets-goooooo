@@ -354,6 +354,9 @@ async def test_async_confirm_after_retries_is_awaited(monkeypatch, captured):
 async def test_free_mode_countdown_runs_people_tool(monkeypatch, captured):
     tool = MagicMock(return_value="sent")
     monkeypatch.setitem(TOOL_FUNCTIONS, "send_message", tool)
+    # send_message has no real implementation yet: declare the schema it would have
+    import backend.agent as agent_module
+    monkeypatch.setitem(agent_module._SCHEMA_PARAMS, "send_message", frozenset({"recipient", "text"}))
     mm = ModeManager(pin=TEST_PIN)
     mm.enter_free(pin=TEST_PIN)
     runner = AgentRunner(

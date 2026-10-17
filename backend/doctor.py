@@ -246,7 +246,7 @@ def check_log_leaks(p: Probe) -> Check:
             text = p.read_tail(path)
         except OSError:
             continue
-        if any(s in text for s in secrets):
+        if any(secrets_guard.secret_in_text(s, text) for s in secrets):
             leaked.append(path.name)
     if not leaked:
         return Check("Logs", "ok", "no key or PIN found in logs/")

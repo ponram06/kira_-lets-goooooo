@@ -183,7 +183,7 @@ def test_ptt_paused_during_typing(workspace: Path):
 
 
 def test_is_vscode_window_active_helper():
-    with patch("pygetwindow.getActiveWindowTitle", return_value="hello.py - demo - Visual Studio Code"):
+    with patch("pygetwindow.getActiveWindowTitle", return_value="hello.py - demo - Visual Studio Code"),          patch("backend.tools.vscode_visible._foreground_process_name", return_value="Code.exe"):
         assert is_vscode_window_active("hello.py") is True
         assert is_vscode_window_active("other.py") is False
 
