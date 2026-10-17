@@ -62,7 +62,16 @@ async def avatar_handler(websocket, expected_token: str):
     # 1. First message must be the auth token
     try:
         first_msg = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-        token_str = str(first_msg).strip()
+        token_str = ""
+        try:
+            parsed = json.loads(first_msg)
+            if isinstance(parsed, dict):
+                token_str = str(parsed.get("token") or parsed.get("auth", "")).strip()
+            else:
+                token_str = str(parsed).strip()
+        except Exception:
+            token_str = str(first_msg).strip()
+
         if not secrets.compare_digest(token_str, expected_token):
             logger.warning("Unauthorized connection rejected (invalid token).")
             await websocket.close(1008, "Invalid token")

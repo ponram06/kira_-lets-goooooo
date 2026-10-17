@@ -110,8 +110,8 @@ tools:
 # =============================================================================
 voice:
   # Push-to-talk hotkey (hold to record, release to transcribe)
-  # Configurable: use a function key (F8) or a character key (e.g. "`")
-  hotkey: "F8"
+  # Configurable: use a character key (e.g. "`") or a function key
+  hotkey: "`"
   # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
   kill_hotkey: "ctrl+alt+k"
 

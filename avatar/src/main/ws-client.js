@@ -77,7 +77,7 @@ class KiraWsClient {
       if (this.isDestroyed) return;
       // Send token immediately as first message as required by backend/server.py
       try {
-        this.ws.send(token);
+        this.ws.send(JSON.stringify({ type: 'auth', token }));
         this.authenticated = true;
         this.currentDelay = this.reconnectMinMs; // Reset backoff upon successful connection
       } catch {

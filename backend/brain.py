@@ -20,6 +20,7 @@ from collections import deque
 from pathlib import Path
 import sys
 import threading
+import time
 from typing import Optional
 
 # Reconfigure stdout to UTF-8 on Windows so emoji characters never crash the terminal
@@ -29,6 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
 import yaml
 
 from backend.agent import AgentRunner
+from backend import events as _events
 from backend.policy import KILL_SWITCH, ModeManager
 from backend.providers import ProviderManager
 from backend.server import WebSocketServer
@@ -195,6 +197,11 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
             ]
 
             # ---- run agent loop ----
+            _events.publish(
+                "voice.processing",
+                f"{persona_name} is thinking...",
+                {"user_input": user_input[:60]},
+            )
             reply, provider = await agent.run(messages)
             history.append({"role": "assistant", "content": reply})
 

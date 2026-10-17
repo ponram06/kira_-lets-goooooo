@@ -430,9 +430,9 @@ class WebSocketServer:
                 # Throttle loudness events to ~20/sec
                 return
             self._last_loudness_time = now
-            raw_lvl = data.get("level", data.get("loudness", 0.0))
+            raw_lvl = data.get("level", data.get("loudness", data.get("value", 0.0)))
             lvl = max(0.0, min(1.0, round(float(raw_lvl), 3)))
-            formatted = {"type": "loudness", "level": lvl, "timestamp": ts}
+            formatted = {"type": "loudness", "level": lvl, "value": lvl, "timestamp": ts}
 
         if formatted is not None:
             self._broadcast(formatted)
@@ -535,16 +535,18 @@ class WebSocketServer:
         except Exception:
             return
 
+        provided_token = None
         try:
             auth_data = json.loads(auth_msg_raw)
-            if not isinstance(auth_data, dict):
-                raise ValueError()
+            if isinstance(auth_data, dict):
+                provided_token = auth_data.get("token") or auth_data.get("auth")
+            elif isinstance(auth_data, str):
+                provided_token = auth_data
         except Exception:
-            await websocket.close(code=1008, reason="Invalid auth message format")
-            return
+            # Not JSON - treat as raw token string directly
+            provided_token = str(auth_msg_raw).strip()
 
-        provided_token = auth_data.get("token") or auth_data.get("auth")
-        if not provided_token or not secrets.compare_digest(str(provided_token), self.token):
+        if not provided_token or not secrets.compare_digest(str(provided_token).strip(), self.token):
             logger.warning("Client authentication failed: invalid token")
             await websocket.close(code=1008, reason="Unauthorized")
             return

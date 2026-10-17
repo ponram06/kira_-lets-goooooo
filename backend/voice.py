@@ -295,6 +295,13 @@ class STTEngine:
             logger.info("Ignoring short audio tap (%.2fs < min %.2fs).", duration, self.min_duration)
             return None
 
+        # Compute audio energy (RMS) to detect silence / ambient typing clicks
+        audio_float = audio_np.astype(np.float32)
+        if audio_np.dtype == np.int16:
+            audio_rms = float(np.sqrt(np.mean(audio_float ** 2)))
+        else:
+            audio_rms = float(np.sqrt(np.mean((audio_float * 32768.0) ** 2)))
+
         # Try Groq hosted Whisper first if available
         if self.cooldown_tracker.is_available("groq"):
             groq_key = os.getenv("GROQ_API_KEY")
@@ -302,7 +309,7 @@ class STTEngine:
                 try:
                     result = await self._transcribe_groq(audio_np, duration, groq_key)
                     if result is not None:
-                        return self._evaluate_quality(result)
+                        return self._evaluate_quality(result, audio_rms=audio_rms)
                 except Exception as exc:
                     logger.warning("Groq STT encountered unexpected error: %s", exc)
             else:
@@ -311,7 +318,7 @@ class STTEngine:
         # Fallback: local faster-whisper
         logger.info("Using local faster-whisper ('%s') for transcription.", self.local_model_name)
         result = await self._transcribe_local(audio_np, duration)
-        return self._evaluate_quality(result)
+        return self._evaluate_quality(result, audio_rms=audio_rms)
 
     async def _transcribe_groq(
         self,
@@ -425,7 +432,7 @@ class STTEngine:
             duration=duration,
         )
 
-    def _evaluate_quality(self, result: TranscriptResult) -> TranscriptResult:
+    def _evaluate_quality(self, result: TranscriptResult, audio_rms: float = 0.0) -> TranscriptResult:
         """
         Check confidence thresholds and filter known silence hallucinations.
         """
@@ -445,8 +452,12 @@ class STTEngine:
 
         # Silence hallucination check
         norm = normalize_utterance(result.text)
-        if norm in SILENCE_HALLUCINATIONS:
-            logger.info("Filtered silence hallucination: '%s'", result.text)
+        if norm in SILENCE_HALLUCINATIONS or (
+            audio_rms > 0.0
+            and audio_rms < 250.0
+            and norm in {"yes", "yeah", "yup", "no", "uh", "um", "ah", "ok", "okay"}
+        ):
+            logger.info("Filtered silence hallucination (rms=%.1f): '%s'", audio_rms, result.text)
             result.hallucination = True
 
         return result
@@ -535,6 +546,8 @@ class TTSEngine:
             def on_word(name: Any, location: Any, length: Any) -> None:
                 if stop_event.is_set() or self.is_interrupted():
                     engine.stop()
+                else:
+                    _events.publish("voice.loudness", "speech loudness", {"level": 0.6, "value": 0.6})
 
             try:
                 engine.connect("word", on_word)
@@ -546,6 +559,7 @@ class TTSEngine:
         except Exception as exc:
             logger.warning("pyttsx3 speech failed: %s", exc)
         finally:
+            _events.publish("voice.loudness", "speech loudness", {"level": 0.0, "value": 0.0})
             try:
                 import pythoncom
                 pythoncom.CoUninitialize()
@@ -553,21 +567,41 @@ class TTSEngine:
                 pass
 
     async def play_pcm(self, samples: np.ndarray, sample_rate: int) -> None:
-        """Play PCM audio through sounddevice with quick interrupt polling."""
+        """Play PCM audio through sounddevice with quick interrupt polling and loudness streaming."""
         if self.is_interrupted() or len(samples) == 0:
             return
 
         try:
+            chunk_size = max(1, int(sample_rate * 0.05))  # ~50ms chunks (20Hz)
+            total_samples = len(samples)
+            start_time = time.monotonic()
+
             sd.play(samples, samplerate=sample_rate)
             while sd.get_stream() and sd.get_stream().active:
                 if self.is_interrupted():
                     sd.stop()
                     break
+
+                elapsed = time.monotonic() - start_time
+                current_idx = int(elapsed * sample_rate)
+                if current_idx < total_samples:
+                    chunk = samples[current_idx : min(total_samples, current_idx + chunk_size)]
+                    if len(chunk) > 0:
+                        rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
+                        norm_loudness = min(1.0, max(0.0, rms / 8000.0))
+                        _events.publish(
+                            "voice.loudness",
+                            "speech loudness",
+                            {"level": round(norm_loudness, 3), "value": round(norm_loudness, 3)},
+                        )
+
                 await asyncio.sleep(0.04)
         except sd.PortAudioError as exc:
             logger.warning("Sound output device unavailable (PortAudioError): %s", exc)
         except Exception as exc:
             logger.warning("Playback error: %s", exc)
+        finally:
+            _events.publish("voice.loudness", "speech loudness", {"level": 0.0, "value": 0.0})
 
     async def speak(self, text: str, speech_end_time: Optional[float] = None) -> None:
         """

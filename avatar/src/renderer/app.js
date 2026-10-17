@@ -145,6 +145,15 @@
     const { type, payload } = eventData;
 
     switch (type) {
+      case 'snapshot':
+        if (payload?.state) {
+          renderer.setState(payload.state);
+        }
+        if (payload?.mode) {
+          renderer.setMode(payload.mode);
+        }
+        break;
+
       case 'state':
         if (payload?.state) {
           renderer.setState(payload.state);
@@ -152,21 +161,37 @@
         break;
 
       case 'speech':
+        renderer.setState('speaking');
         if (payload?.text) {
           bubble.say(payload.text);
         }
         break;
 
-      case 'loudness':
-        if (typeof payload?.value === 'number') {
-          renderer.setLoudness(payload.value);
+      case 'loudness': {
+        const val = typeof payload?.value === 'number'
+          ? payload.value
+          : (typeof payload?.level === 'number' ? payload.level : null);
+        if (val !== null) {
+          renderer.setLoudness(val);
         }
         break;
+      }
 
       case 'mode':
+      case 'mode_change':
         if (payload?.mode) {
           renderer.setMode(payload.mode);
         }
+        break;
+
+      case 'step_start':
+      case 'tool_start':
+        renderer.setState('working');
+        break;
+
+      case 'step_done':
+      case 'tool_done':
+        renderer.setState('idle');
         break;
 
       case 'error':
