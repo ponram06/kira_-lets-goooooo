@@ -133,9 +133,47 @@ M3. Messaging (WhatsApp adapter with contact fuzzy resolution, ask-first confirm
 
 ---
 
+## M3. Messaging (WhatsApp adapter) — done (2026-10-17)
+
+### What was done
+- **Contact Resolution & Phone Privacy Engine (`backend/contacts.py`)**:
+  - Contacts file stored outside repository in `%APPDATA%\Kira\contacts.yaml` (overridable via `KIRA_USER_DIR`). Provided `contacts.example.yaml` in repo with fake numbers.
+  - Model must provide only contact name. Raw phone number strings passed by the model are strictly refused with actionable error messages.
+  - Validates international phone numbers under E.164.
+  - Phone masking: all but the last 3 digits are masked (`+********567`). The full number is never displayed in prompts, spoken aloud, logged, or emitted in WebSocket events.
+  - Case-insensitive exact matching and fuzzy token similarity matching (`difflib.SequenceMatcher`).
+  - Ambiguous matches prompt the user one candidate at a time with yes/no; returns $\le 3$ suggestions; never guesses a number or leaks the full contact list to cloud LLMs.
+- **Message Constraints & Provenance Guard (`backend/tools/whatsapp_tool.py`)**:
+  - Message text is capped at 280 characters; rejected in full without silent truncation if exceeded.
+  - Control characters and newlines are rejected.
+  - Scanned for secret patterns using `secrets_guard.known_secrets()`.
+  - **Provenance guard**: Refuses messages containing 20+ characters copied from prior tool outputs or file reads in the current task that were not in the user's prompt.
+- **Persistent Rate Limiting & Approvals (`backend/whatsapp_rate_limit.py`)**:
+  - Persisted in `%APPDATA%\Kira\whatsapp_rate_limit.json` with atomic writes via tempfile/replace. Corrupt or unreadable files fail closed (never reset counters).
+  - Minimum gap (30s), hourly cap (5 messages), daily cap (20 messages).
+  - First message to any contact in Free mode requires explicit user confirmation; subsequent sends to that contact use the 3-second countdown.
+- **Foreground Verification & Honest Delivery Reporting**:
+  - Enforces mandatory `request_id` (fail closed if missing or empty). Strictly one send allowed per request; zero retries by the agent loop on error or after Enter.
+  - Launches deep link via `whatsapp://send` URI scheme (isolated; rejected in all other tools).
+  - Verifies foreground window via `ctypes.windll.user32` (`GetForegroundWindow`, `GetWindowThreadProcessId`) matches WhatsApp process names (`whatsapp.exe`, `whatsappdesktop.exe`). Aborts without pressing Enter if not focused or if an error dialog is active.
+  - Sends `VK_RETURN` via `keybd_event`. Default honest report: `"I pressed Enter. I can't verify delivery, check WhatsApp."`.
+- **Policy & Adapter Integration**:
+  - Registered `send_whatsapp` in `TOOL_REGISTRY` with `HIGH` risk, `affects_people=True`, `outside_workspace=False`.
+  - Updated `WhatsAppAdapter` in `backend/adapters/whatsapp.py` to delegate `send_message` directly to `send_whatsapp`.
+- **No new external packages** (uses standard library `ctypes`, `urllib.parse`, `difflib`, `json`, `yaml`).
+
+### Tests
+- Python: **309 passed, 1 skipped** (`.venv\Scripts\python.exe -m pytest -q`). 23 comprehensive offline tests in `tests/test_whatsapp.py`.
+- Electron: **58 passed** (`cd avatar; npm test`).
+
+### Next milestone
+M4. Browser tasks (Playwright).
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
 - **M2B. Universal app launcher & adapters**: Done (AppIndex, safe lnk resolution, denylist, first-launch approvals, Spotify/WhatsApp adapters, planner architecture).
-- **M3. Messaging (WhatsApp adapter)**: Not started (next).
-- **M4. Browser tasks (Playwright)**: Not started.
+- **M3. Messaging (WhatsApp adapter)**: Done (contacts resolution, phone masking, provenance guard, rate limits, foreground check, single send).
+- **M4. Browser tasks (Playwright)**: Not started (next).

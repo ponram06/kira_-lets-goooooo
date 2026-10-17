@@ -454,6 +454,7 @@ Kira includes local system controls, persistent timers/reminders, and a fallback
 | `cancel_reminder` | **LOW** | Allow | Allow | Cancels a pending timer or reminder by ID. |
 | `open_any_app` | **LOW** | Ask first (first launch) | Ask first (first launch) | Universal launcher for Start Menu and Store apps. Resolves locally via `AppIndex`. Requires first-launch approval in both modes. |
 | `media_control` | **LOW** | Allow | Allow | Keyboard media control (`open`, `play_pause`, `next`, `previous`, `volume_up`, `volume_down`) for supported apps (Spotify). |
+| `send_whatsapp` | **HIGH** | Ask first | Countdown (3s) | WhatsApp messaging tool. Resolves contact name against `%APPDATA%\Kira\contacts.yaml` (never accepts phone numbers from model). Spoken read-back of contact name, masked number, and full message. Verifies WhatsApp foreground window before pressing Enter keystroke. Rates limited persistently. First send to contact in Free mode requires confirmation. |
 
 ### M2B. Universal App Launcher, Adapters & Any-Task Planner
 
@@ -473,10 +474,32 @@ Kira includes local system controls, persistent timers/reminders, and a fallback
 - **App Adapters (`backend/adapters/`)**:
   - Fixed action lists with parameter validation.
   - `spotify`: Desktop launch and virtual media keys (`play_pause`, `next`, `previous`, `volume_up`, `volume_down`). Confirms process is running first and reports `"play/pause sent"`.
-  - `whatsapp`: Desktop opener only; messaging deferred to Milestone 3.
+  - `whatsapp`: Desktop opener and message adapter delegating to `send_whatsapp`.
 - **Any-Task Planner Specification (`docs/ANY_TASK_PLANNER.md`)**:
   - 5-stage fallback hierarchy: Adapter $\to$ Built-in Tool $\to$ Browser (M4) $\to$ Script (M5) $\to$ Screen Control (M6).
   - 15-step task limit, zero policy lowering, screen control disabled on Ollama, zero password typing, read content is data.
+
+### M3. Messaging & WhatsApp Integration
+
+- **Contact Resolution & Phone Privacy (`backend/contacts.py`)**:
+  - Contacts stored outside the repository in `%APPDATA%\Kira\contacts.yaml` (`contacts.example.yaml` in repo with fake numbers).
+  - Model must provide only contact name. Any raw phone number string passed by the model is strictly rejected.
+  - Phone numbers validated under E.164. All but the last 3 digits are masked (`+********567`). The full number is never displayed in prompts, spoken aloud, logged, or emitted in WebSocket events.
+  - Case-insensitive exact and fuzzy matching. Ambiguous matches ask one candidate at a time with yes/no; returns $\le 3$ suggestions; never guesses.
+- **Message Constraints & Provenance Guard (`backend/tools/whatsapp_tool.py`)**:
+  - Capped at 280 characters with full text presented in confirmation prompts (no truncation).
+  - Control characters and newlines are rejected.
+  - Scanned for secret patterns using `secrets_guard`.
+  - **Provenance guard**: Refuses messages containing 20+ characters copied from prior tool execution outputs or file reads not present in user request.
+- **Persistent Rate Limiting & Approvals (`backend/whatsapp_rate_limit.py`)**:
+  - Persisted in `%APPDATA%\Kira\whatsapp_rate_limit.json` with atomic writes. Corrupt or unreadable files fail closed.
+  - Minimum gap (30s), hourly cap (5 messages), daily cap (20 messages).
+  - First message to any contact in Free mode requires explicit confirmation; subsequent sends use 3-second countdown.
+- **Execution & Honest Verification**:
+  - Mandatory `request_id` (fail-closed if missing). Strictly one send allowed per request; zero retries by agent loop.
+  - Opens `whatsapp://send` URI scheme (blocked in all other tools).
+  - Verifies foreground window via `ctypes` (`GetForegroundWindow`, `GetWindowThreadProcessId`) matches WhatsApp process names (`whatsapp.exe`, `whatsappdesktop.exe`). Aborts without pressing Enter if not focused or if error dialog is shown.
+  - Sends `VK_RETURN` via `keybd_event`. Default honest report: `"I pressed Enter. I can't verify delivery, check WhatsApp."`.
 
 ### Avatar Chat Box (Fallback Input)
 
