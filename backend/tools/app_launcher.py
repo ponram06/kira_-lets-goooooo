@@ -117,6 +117,10 @@ def open_any_app(
     if not clean_name:
         return "Error: Application name cannot be empty."
 
+    # Reject protocol/URL schemes - open_any_app only launches installed desktop applications
+    if "://" in clean_name:
+        return "Error: open_any_app only launches installed desktop applications by name, not URL schemes."
+
     # 1. Kill switch check
     if KILL_SWITCH.is_stopped():
         return "Action blocked: kill switch is active."

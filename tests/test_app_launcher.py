@@ -276,12 +276,12 @@ def test_adapter_unknown_action_rejected():
     assert "Unknown action" in res.message
 
 
-def test_whatsapp_messaging_deferred_to_m3():
-    """WhatsApp send_message is explicitly deferred to Milestone 3."""
+def test_whatsapp_messaging_delegates_to_m3_requiring_request_id():
+    """WhatsApp send_message delegates to send_whatsapp in Milestone 3, requiring request_id."""
     wa = WhatsAppAdapter()
     res = wa.execute("send_message", recipient="Meldan", message="Hello")
     assert res.success is False
-    assert "Milestone 3" in res.message
+    assert "request_id is required" in res.message
 
 
 def test_spotify_media_keys_running_check_and_reporting():

@@ -55,8 +55,8 @@ class WhatsAppAdapter(AppAdapter):
 
         if action == "send_message":
             from backend.tools.whatsapp_tool import send_whatsapp
-            contact = params.get("contact", "")
-            text = params.get("text", "")
+            contact = params.get("contact") or params.get("recipient", "")
+            text = params.get("text") or params.get("message", "")
             request_id = params.get("request_id")
             res_str = send_whatsapp(contact=contact, text=text, request_id=request_id)
             success = "I pressed Enter" in res_str

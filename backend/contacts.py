@@ -190,8 +190,6 @@ def resolve_contact(query: str) -> ContactResolveResult:
     scored: list[tuple[float, str]] = []
     for cname in contacts:
         ratio = difflib.SequenceMatcher(None, norm_q, cname).ratio()
-        if norm_q in cname or cname in norm_q:
-            ratio = max(ratio, 0.85)
         if ratio >= 0.40:
             scored.append((ratio, cname))
 
