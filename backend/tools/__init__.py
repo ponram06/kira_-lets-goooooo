@@ -19,6 +19,7 @@ from backend.tools.app_launcher import media_control, open_any_app
 from backend.tools.whatsapp_tool import send_whatsapp
 from backend.tools.script_runner import run_script
 from backend.tools.screen_tool import screen_task
+from backend.skills import delete_skill, list_skills, rename_skill, run_skill
 from backend.tools.browser_tools import (
     browser_back,
     browser_click,
@@ -58,6 +59,11 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "run_script": run_script,
     # M6 screen control (the agent awaits screen_tool.run_screen_task instead)
     "screen_task": screen_task,
+    # M7 learned skills (the agent replays run_skill itself)
+    "list_skills": list_skills,
+    "run_skill": run_skill,
+    "rename_skill": rename_skill,
+    "delete_skill": delete_skill,
     # M4 browser tools
     "browser_open": browser_open,
     "browser_search": browser_search,
@@ -280,6 +286,14 @@ M4_TOOLS_SCHEMA: list[dict] = [
 ]
 
 KIRA_TOOLS_SCHEMA.extend(M2_TOOLS_SCHEMA)
+KIRA_TOOLS_SCHEMA.extend([
+    _fn("list_skills", "List the user's saved skills (recorded multi-step tasks)."),
+    _fn("run_skill", "Replay a saved skill by name. Every step is checked by the safety policy again.",
+        {"name": {"type": "string"}}, ["name"]),
+    _fn("rename_skill", "Rename a saved skill.",
+        {"name": {"type": "string"}, "new_name": {"type": "string"}}, ["name", "new_name"]),
+    _fn("delete_skill", "Delete a saved skill.", {"name": {"type": "string"}}, ["name"]),
+])
 KIRA_TOOLS_SCHEMA.append(_fn(
     "screen_task",
     "LAST RESORT: control the screen with mouse and keyboard to reach a goal when no adapter, "

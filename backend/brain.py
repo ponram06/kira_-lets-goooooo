@@ -33,6 +33,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from backend.agent import AgentRunner
+from backend import skills
 from backend import envfile
 from backend import events as _events
 from backend.app_state import AppState
@@ -244,6 +245,15 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
             _events.publish("assistant.reply", f"{state.persona_display} replied", {"text": reply[:1000]})
 
             await voice_manager.speak(reply, speech_end_time=speech_end_time)
+
+            # M7: offer to save a successful multi-step task as a skill
+            try:
+                saved = await skills.offer_save(agent.last_recipe, user_input, confirm_cb, voice_manager.speak)
+                if saved:
+                    print(f"[{state.persona_display}]: Saved skill '{saved}'.")
+                    await voice_manager.speak(f"Saved. Say run skill {saved} to repeat it.")
+            except Exception as exc:
+                logger.debug("Skill offer failed: %s", type(exc).__name__)
 
     finally:
         shutdown_task.cancel()

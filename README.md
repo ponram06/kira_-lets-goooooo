@@ -544,6 +544,17 @@ When no adapter, built-in tool, browser tool or script fits, the agent can call 
 
 Test: `.venv\Scripts\python.exe -m pytest -q tests	est_screen_control.py` and `cd avatar; npm test`
 
+### M7. Learned Skills
+
+After a task that took two or more successful steps, Kira asks: *"Save it as a skill named …?"*. Say yes to save it.
+
+- Say **"list my skills"**, **"run skill make demo"**, **"rename skill make demo to demo setup"**, **"delete skill demo setup"** (delete asks first in Restricted mode).
+- Skills are JSON recipes of tool calls in `%APPDATA%\Kira\skills.json` (never in the repo). Only the tool name and its normal parameters are stored; steps containing a stored secret are never saved.
+- **A skill can never raise its own permissions**: replay sends every step through the same policy checks, asks, countdowns, rate limits and kill switch as a live task, and on load each step is re-validated (unknown tools, skill tools and extra fields such as `mode` or `approved` are dropped, even if you edit the file). Replay stops at the first step that fails or that you decline.
+- The model cannot create skills by itself; only your "yes" after a task saves one.
+
+Test: `.venv\Scripts\python.exe -m pytest -q tests\test_skills.py`
+
 ### Avatar Chat Box (Fallback Input)
 
 When a microphone is unavailable or muted, or when you prefer typing:

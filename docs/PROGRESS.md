@@ -302,6 +302,26 @@ M7: learned skills — `backend/skills.py` (JSON recipes in user config dir, off
 
 ---
 
+## M7. Learned skills — done (2026-10-17)
+
+### What was done
+- `backend/skills.py`: JSON recipes in the user config folder; `save_skill` (only via the post-task offer, needs the user's yes; secrets refused), `list_skills`, `rename_skill`, `delete_skill`; `clean_steps` re-validates on every load (drops unknown/skill tools and non-schema fields); `ScriptedProvider` replays one step per turn and stops at the first failure.
+- Agent records `last_recipe` (successful steps, public args only) and replays `run_skill` through a nested `AgentRunner` with the same mode manager, confirm callback, countdown and kill switch. Skills cannot run skills.
+- `brain.py` offers to save after a reply when the task had 2+ successful steps.
+- Policy: list/run/rename LOW, delete MEDIUM `free_auto` (asks in Restricted).
+
+### Tests
+- pytest **452 passed, 1 skipped** (18 new in `tests/test_skills.py`, including a tampered skills.json that tries `mode: free`, `config_path`, `format_disk` and recursion). Electron **71 passed**.
+
+### Known gaps
+- The save offer and spoken skill commands need a hand test with voice.
+- Skills that send WhatsApp messages store the message text in `skills.json` (user folder) so they can be replayed; each replay still asks or counts down.
+
+### NEXT STEP
+M8: VRM renderer in `avatar/` (three + @pixiv/three-vrm pinned), character profiles in config.yaml, pure modules for animation/expression/lip-sync/fallback with node tests, sprite stays the fallback.
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).

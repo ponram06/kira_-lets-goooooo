@@ -271,6 +271,28 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None, "free_auto": True,
     },
+    # M7 learned skills: replay runs every step through check() again, so
+    # starting a replay is LOW; deleting a saved skill asks in Restricted.
+    "list_skills": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "run_skill": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "rename_skill": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "delete_skill": {
+        "risk": RiskLevel.MEDIUM, "allowlisted": False,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None, "free_auto": True,
+    },
     # Reading a file outside workspace (not allowlisted → ask)
     "read_file_outside": {
         "risk": RiskLevel.MEDIUM, "allowlisted": False,
