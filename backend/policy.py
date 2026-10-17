@@ -103,6 +103,17 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    "open_any_app": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+        "requires_approval": True,
+    },
+    "media_control": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
     "open_site": {
         "risk": RiskLevel.LOW, "allowlisted": True,
         "affects_people": False, "outside_workspace": False,
@@ -563,6 +574,7 @@ def check(
     action: str,
     mode: Mode,
     allowlisted: Optional[bool] = None,
+    approved: Optional[bool] = None,
     chained: bool = False,
 ) -> str:
     """
@@ -576,6 +588,8 @@ def check(
         Current permission mode (RESTRICTED or FREE).
     allowlisted:
         Optional override for commands/apps: True if on allow-list, False if unknown.
+    approved:
+        Optional override for apps requiring user approval: True if approved, False if unapproved.
     chained:
         If True (e.g. command contains shell metacharacters like & or |), immediately blocks.
     """
@@ -596,6 +610,10 @@ def check(
     # 2. Forbidden category — absolute block
     if entry.get("forbidden_category"):
         return "block"
+
+    # 2.5 Approval requirement — unapproved actions must ask in BOTH modes
+    if entry.get("requires_approval") and not approved:
+        return "ask"
 
     risk: RiskLevel = entry["risk"]
     if allowlisted is None:
