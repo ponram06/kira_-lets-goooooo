@@ -18,9 +18,10 @@ import re
 import tempfile
 from pathlib import Path
 from typing import Optional
+from backend import paths
 
 # Project-root .env (tests pass their own path or set KIRA_ENV_FILE)
-_DEFAULT_ENV = Path(__file__).parent.parent / ".env"
+_DEFAULT_ENV = paths.SOURCE_ROOT / ".env"   # dev default; KIRA_HOME moves it
 
 _NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 MAX_VALUE_LEN = 512
@@ -29,7 +30,7 @@ MAX_VALUE_LEN = 512
 def env_path() -> Path:
     """Return the active .env path (KIRA_ENV_FILE overrides the default)."""
     override = os.environ.get("KIRA_ENV_FILE")
-    return Path(override) if override else _DEFAULT_ENV
+    return Path(override) if override else paths.home() / ".env"
 
 
 def _parse_line(line: str) -> Optional[tuple[str, str]]:

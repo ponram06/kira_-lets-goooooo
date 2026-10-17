@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from backend import envfile, secrets_guard
 from backend.config_loader import load_config
+from backend import paths
 
 ROOT = Path(__file__).parent.parent
 _LOG_SCAN_BYTES = 5 * 1024 * 1024      # scan at most the last 5 MB of each log
@@ -88,7 +89,7 @@ class Probe:
         return None
 
     def log_files(self) -> list[Path]:
-        logs = ROOT / "logs"
+        logs = paths.logs_dir()
         return [p for p in logs.rglob("*") if p.is_file()] if logs.is_dir() else []
 
     def read_tail(self, path: Path) -> str:

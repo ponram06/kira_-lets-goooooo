@@ -56,10 +56,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from backend import secrets_guard
+from backend import paths
 
 logger = logging.getLogger(__name__)
 
-LOGS_DIR = Path(__file__).parent.parent / "logs"
+LOGS_DIR = paths.logs_dir()
 EVENTS_LOG = LOGS_DIR / "events.jsonl"
 
 # Thread-safe subscriber list

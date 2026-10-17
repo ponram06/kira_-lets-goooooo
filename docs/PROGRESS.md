@@ -370,15 +370,24 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 
 ---
 
-## Overall Milestones Status Summary
-- **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
-- **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
-- **M2B. Universal app launcher & adapters**: Done (AppIndex, safe lnk resolution, denylist, first-launch approvals, Spotify/WhatsApp adapters, planner architecture).
-- **M3. Messaging (WhatsApp adapter)**: Done (contacts resolution, phone masking, provenance guard, rate limits, foreground check, single send).
-- **M4. Browser tasks (Playwright)**: Done (headed mode, clean profile, IP safety, DNS rebinding defence, prompt injection guard, taint tracking, context hardening).
-- **M5. Self-written scripts**: Done (static checks, runtime limits, ask/countdown, optional Docker/Windows Sandbox).
-- **M6. Screen control**: Done, needs hand test with a vision provider.
-- **M7. Learned skills**: Done.
-- **M8. 3D avatar**: Done with a generated test model; needs your .vrm.
-- **M9. Persona and polish**: Done.
+## Overall Milestones Status Summary (Handoff Assessment: 2026-10-17)
+
+| Milestone | Status | Testing & Verification State | Notes / Hand Test Requirements |
+|---|---|---|---|
+| **M1. App controls** | Done | Tested with mocks + Needs hand test | Tray icon, hover/right-click menus, PIN-gated Free mode dialog, and doctor CLI verified with unit tests. Physical tray, global hotkeys, and multi-monitor positioning require manual screen testing. |
+| **M2. System tools** | Done | Tested with mocks + Needs hand test | pycaw, brightness, LockWorkStation, GDI screenshot, and reminders scheduler verified with unit tests. Chat box keyboard-focus fix verified with Node tests; real hardware adjustments and chat box focus require manual verification. |
+| **M2B. Launcher & adapters** | Done (Core) / Partial | Tested with mocks + Needs hand test | AppIndex, safe .lnk resolution, denylist, first-launch SHA-256 approvals, and planner spec verified with mocks. Spotify/WhatsApp adapters verified; desktop app launching and Spotify-to-browser fallback require live desktop testing. |
+| **M3. WhatsApp messaging** | Done | Tested with mocks + Needs hand test | Contact privacy, phone masking (`+********567`), 280-char cap, provenance guard, and atomic rate limiter verified with unit tests. Foreground window check (`whatsapp.exe`) and Enter keystroke require live WhatsApp Desktop test. |
+| **M4. Browser tasks** | Done | Tested with mocks + Needs hand test | URL guard, DNS rebinding defence, prompt injection delimiter wrapping, interaction guard, and taint tracking verified with mocks. Real headed Chromium execution requires live web browsing test. |
+| **M5. Self-written scripts** | Done | Verified in temp workspace | Static AST checks, base interpreter execution (`-I -B`), timeout, output clipping, and Windows Job Object limits verified with real local subprocesses. Windows Sandbox/Docker require manual verification if enabled. |
+| **M6. Screen control** | Done | Tested with mocks + Needs hand test | Multi-monitor/DPI geometry, capture, safety bounds, sensitive-window checks, and highlight overlay verified with unit tests. Requires manual test with an active vision provider configured. |
+| **M7. Learned skills** | Done | Verified with mocks + Needs hand test | JSON skill recipes, tamper resistance, and nested agent execution verified with offline unit tests. Spoken skill saving/replay requires voice testing. |
+| **M8. 3D avatar (VRM)** | Done (Generated model) | Tested with mocks + Smoke verified | Three.js / @pixiv/three-vrm renderer, animations, lip sync, expressions, and 2D sprite fallback verified with 114 Node tests and hidden-window smoke test. Real user `.vrm` model requires manual visual test. |
+| **M9. Persona & polish** | Done | Tested with mocks + Needs hand test | Live Edge voice switching, notebook/Gotham themes, mode glow, startup greeting, and error handling verified with tests. Audio pitch/tone and theme visual polish require hand testing. |
+| **M10. Packaging** | **IN PROGRESS** | Unfinished work | `backend/paths.py` (writable locations abstraction) and `requirements-dev.txt` created; PyInstaller bundling, electron-builder config, log rotation, setup script, and clean-venv test are in progress. |
+| **M11. Documentation & Handoff** | Not started | Pending M10 | Architecture diagrams, user guide, demo script, third-party notices, and completion checklist. |
+
+### NEXT STEP
+M10: Complete packaging — PyInstaller spec for backend, electron-builder portable/NSIS config, log rotation, `scripts/setup.bat`, and clean virtual environment test.
+
 

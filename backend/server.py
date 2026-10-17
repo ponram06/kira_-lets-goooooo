@@ -49,11 +49,12 @@ from backend import events as _events
 from backend import secrets_guard
 from backend.policy import KILL_SWITCH, ModeManager
 from backend.voice import register_confirmation_response
+from backend import paths
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.yaml"
-_ROOT_DIR = Path(__file__).parent.parent
+_ROOT_DIR = paths.home()   # token file lives under KIRA_HOME in packaged builds
 
 # Regex to mask phone numbers in outbound event text
 _PHONE_PATTERN = re.compile(r"(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
@@ -102,7 +103,7 @@ class WebSocketServer:
             self.token_file = p.resolve()
 
         # Guard: Token file MUST NOT be inside workspace/
-        workspace_dir = (_ROOT_DIR / "workspace").resolve()
+        workspace_dir = paths.workspace_root()
         try:
             self.token_file.relative_to(workspace_dir)
             raise ValueError(f"Security error: Token file cannot be inside workspace/: {self.token_file}")

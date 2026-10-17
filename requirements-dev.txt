@@ -1,0 +1,7 @@
+# Developer / QA / packaging tools (not needed to run Kira)
+-r requirements.txt
+pyinstaller==6.22.3     # M10: freezes the backend into a one-folder build
+pytest-cov==7.1.0       # coverage numbers for the test report
+pip-audit==2.10.1       # dependency vulnerability audit
+bandit==1.9.4           # Python security linter
+ruff==0.16.9            # linter

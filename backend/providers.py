@@ -33,7 +33,9 @@ from openai import (
     RateLimitError,
 )
 
-load_dotenv()  # Load .env into os.environ at import time
+from backend import envfile
+
+load_dotenv(envfile.env_path())  # Load .env (KIRA_HOME aware) into os.environ at import time
 
 logger = logging.getLogger(__name__)
 

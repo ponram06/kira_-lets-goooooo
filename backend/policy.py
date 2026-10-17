@@ -41,6 +41,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
+from backend import paths
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 # Workspace root — the ONLY directory tools are allowed to modify.
 # Tests can override this by patching ``policy.WORKSPACE_ROOT``.
 # ---------------------------------------------------------------------------
-WORKSPACE_ROOT: Path = (Path(__file__).parent.parent / "workspace").resolve()
+WORKSPACE_ROOT: Path = paths.workspace_root()   # KIRA_WORKSPACE in packaged builds
 
 
 # ---------------------------------------------------------------------------

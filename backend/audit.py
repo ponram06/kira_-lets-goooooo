@@ -13,10 +13,11 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from backend import paths
 
 logger = logging.getLogger(__name__)
 
-LOGS_DIR = Path(__file__).parent.parent / "logs"
+LOGS_DIR = paths.logs_dir()
 ACTIONS_LOG = LOGS_DIR / "actions.jsonl"
 
 # Event listener callbacks (e.g. WebSocket feed)
