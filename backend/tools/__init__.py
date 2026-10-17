@@ -17,6 +17,16 @@ from backend.tools.system_control import brightness, lock_pc, system_info, take_
 from backend.tools.reminders_tool import cancel_reminder, list_reminders, set_reminder, set_timer
 from backend.tools.app_launcher import media_control, open_any_app
 from backend.tools.whatsapp_tool import send_whatsapp
+from backend.tools.browser_tools import (
+    browser_back,
+    browser_click,
+    browser_close,
+    browser_open,
+    browser_read,
+    browser_scroll,
+    browser_search,
+    browser_type,
+)
 
 # Mapping of tool name -> callable implementation
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -42,6 +52,15 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "media_control": media_control,
     # M3 messaging
     "send_whatsapp": send_whatsapp,
+    # M4 browser tools
+    "browser_open": browser_open,
+    "browser_search": browser_search,
+    "browser_read": browser_read,
+    "browser_click": browser_click,
+    "browser_type": browser_type,
+    "browser_scroll": browser_scroll,
+    "browser_back": browser_back,
+    "browser_close": browser_close,
 }
 
 
@@ -232,7 +251,30 @@ KIRA_TOOLS_SCHEMA: list[dict] = [
     },
 ]
 
+M4_TOOLS_SCHEMA: list[dict] = [
+    _fn("browser_open", "Open an HTTPS website in the headed browser.",
+        {"url": {"type": "string", "description": "Safe HTTPS URL to open (e.g. 'https://docs.python.org')"}},
+        ["url"]),
+    _fn("browser_search", "Search the web using a safe search engine.",
+        {"query": {"type": "string", "description": "Search query text"}},
+        ["query"]),
+    _fn("browser_read", "Read visible, sanitized text from the current browser page wrapped in untrusted data markers."),
+    _fn("browser_click", "Click an element by visible button text, link text, or role.",
+        {"target": {"type": "string", "description": "Visible text or role of element to click"}},
+        ["target"]),
+    _fn("browser_type", "Type text into a field by label or placeholder without pressing Enter.",
+        {"field_label": {"type": "string", "description": "Label, placeholder, or name of input field"},
+         "text": {"type": "string", "description": "Text to type into the field"}},
+        ["field_label", "text"]),
+    _fn("browser_scroll", "Scroll the active page viewport up or down.",
+        {"direction": {"type": "string", "enum": ["up", "down"], "description": "Scroll direction"},
+         "amount": {"type": "integer", "description": "Pixels to scroll (default: 500)"}}),
+    _fn("browser_back", "Navigate back in browser history."),
+    _fn("browser_close", "Close the active browser page and context."),
+]
+
 KIRA_TOOLS_SCHEMA.extend(M2_TOOLS_SCHEMA)
+KIRA_TOOLS_SCHEMA.extend(M4_TOOLS_SCHEMA)
 
 __all__ = [
     "create_folder",
@@ -245,7 +287,16 @@ __all__ = [
     "open_any_app",
     "media_control",
     "send_whatsapp",
+    "browser_open",
+    "browser_search",
+    "browser_read",
+    "browser_click",
+    "browser_type",
+    "browser_scroll",
+    "browser_back",
+    "browser_close",
     "TOOL_FUNCTIONS",
     "KIRA_TOOLS_SCHEMA",
 ]
+
 

@@ -190,6 +190,47 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    # M4 browser tools
+    "browser_open": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_search": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_read": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_click": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_type": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_scroll": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_back": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "browser_close": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
 
     # ── MEDIUM risk ──────────────────────────────────────────────────────────
     # run_command / run_script: allowlisted + inside workspace → auto-allow

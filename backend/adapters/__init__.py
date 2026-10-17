@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.adapters.base import AdapterResult, AppAdapter
+from backend.adapters.browser import BrowserAdapter
 from backend.adapters.generic import GenericAppAdapter
 from backend.adapters.spotify import SpotifyAdapter
 from backend.adapters.whatsapp import WhatsAppAdapter
@@ -16,6 +17,7 @@ from backend.adapters.whatsapp import WhatsAppAdapter
 _ADAPTERS: dict[str, AppAdapter] = {
     "spotify": SpotifyAdapter(),
     "whatsapp": WhatsAppAdapter(),
+    "browser": BrowserAdapter(),
     "generic": GenericAppAdapter(),
 }
 
@@ -41,6 +43,7 @@ def list_adapters() -> list[str]:
 __all__ = [
     "AdapterResult",
     "AppAdapter",
+    "BrowserAdapter",
     "GenericAppAdapter",
     "SpotifyAdapter",
     "WhatsAppAdapter",

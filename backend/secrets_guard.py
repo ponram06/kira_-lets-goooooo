@@ -80,6 +80,16 @@ def redact(text: Any) -> Any:
     return text
 
 
+def contains_secret(text: str) -> bool:
+    """Return True if text contains any known secret value."""
+    if not isinstance(text, str) or not text:
+        return False
+    for secret in known_secrets():
+        if secret and secret in text:
+            return True
+    return False
+
+
 def redact_obj(obj: Any) -> Any:
     """Recursively redact strings inside dicts, lists and tuples."""
     if isinstance(obj, str):

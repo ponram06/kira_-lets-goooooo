@@ -104,6 +104,12 @@ class AgentRunner:
         task_tool_outputs: list[str] = []
         whatsapp_sent_in_task: bool = False
 
+        try:
+            from backend.browser.manager import BROWSER_MANAGER
+            BROWSER_MANAGER.reset_task_taint()
+        except Exception:
+            pass
+
         while True:
             # 1. Kill switch check before step
             if KILL_SWITCH.is_stopped():
@@ -231,6 +237,9 @@ class AgentRunner:
                     fn_args["user_request"] = user_request_text
                     fn_args["tool_outputs"] = list(task_tool_outputs)
                     fn_args["speak_cb"] = self.speak
+                elif fn_name.startswith("browser_"):
+                    fn_args["active_provider"] = last_provider
+                    fn_args["mode"] = self.mode_manager.mode
 
                 # Policy gate
                 decision = check(
@@ -330,6 +339,16 @@ class AgentRunner:
                             observation = await self._run_tool(fn_name, fn_args)
                 elif decision == "allow":
                     observation = await self._run_tool(fn_name, fn_args)
+                    if isinstance(observation, str) and observation.startswith("Confirmation required:"):
+                        if self.speak:
+                            await self.speak("I need your confirmation before proceeding with this browser action.")
+                        user_ok = await self._confirm(observation)
+                        if not user_ok:
+                            observation = f"USER DECLINED: Action on '{fn_name}' was not approved by user."
+                        else:
+                            fn_args_confirmed = dict(fn_args)
+                            fn_args_confirmed["confirm_cb"] = lambda p: True
+                            observation = await self._run_tool(fn_name, fn_args_confirmed)
                 else:
                     observation = f"ERROR: Unknown policy decision '{decision}'."
 

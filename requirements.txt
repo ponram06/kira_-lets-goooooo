@@ -35,3 +35,7 @@ pycaw==20260927         # volume up / down / mute (Windows Core Audio)
 comtypes==1.4.17        # COM bridge used by pycaw
 psutil==7.2.2           # CPU, RAM and battery for system info
 screen-brightness-control==0.27.2   # display brightness (laptop panels and DDC/CI monitors)
+
+# Browser tools (M4)
+playwright==1.63.0      # browser automation in headed mode (Chromium only)
+
