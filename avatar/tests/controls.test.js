@@ -18,8 +18,9 @@ const { DEFAULTS, loadUserConfig, saveUserConfig, sanitize, userDir, isValidHotk
 const { resolveStartPosition, isOnAnyDisplay } = require('../src/shared/bounds');
 const { scaledWindowSize, scaleFor } = require('../src/shared/sizes');
 const { formatFeedEntry, pushFeed } = require('../src/shared/feed');
-const { BackendProcess } = require('../src/main/backend-process');
+const { BackendProcess, defaultPythonPath } = require('../src/main/backend-process');
 const { runPyCli } = require('../src/main/py-cli');
+
 const { createCommand, isValidCommand } = require('../src/shared/schema');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -330,7 +331,21 @@ describe('Backend process', () => {
     assert.equal(await bp.stop(() => { asked = true; return true; }), 'external-asked');
     assert.equal(asked, true);
   });
+
+  it('spawns bundled backend executable with --headless', async () => {
+    let args = null;
+    const bp = new BackendProcess({ python: 'C:\\app\\kira-backend.exe', cwd: 'root', logPath: 'l', probePort: async () => false,
+      spawn: (cmd, a, opts) => { args = { cmd, a, opts }; return fakeChild(); }, fs: fakeFs() });
+    assert.equal(await bp.ensureStarted(), 'started');
+    assert.deepEqual(args.a, ['--headless']);
+  });
+
+  it('defaultPythonPath resolves configured or fallback path correctly', () => {
+    assert.equal(defaultPythonPath('root', 'custom\\python.exe'), path.resolve('root', 'custom\\python.exe'));
+    assert.equal(defaultPythonPath('root'), path.join('root', '.venv', 'Scripts', 'python.exe'));
+  });
 });
+
 
 // ── settings CLI runner ──────────────────────────────────────────────────────
 

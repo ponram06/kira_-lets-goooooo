@@ -57,8 +57,10 @@ class BackendProcess {
     this.host = o.host || '127.0.0.1';
     this.port = o.port || 8765;
     this.timeoutMs = o.timeoutMs ?? 5000;
-    this.args = o.args || ['-m', 'backend.main', '--headless'];
+    const isBundled = this.python && path.basename(this.python).toLowerCase().startsWith('kira-backend');
+    this.args = o.args || (isBundled ? ['--headless'] : ['-m', 'backend.main', '--headless']);
     this.spawn = o.spawn || childProcess.spawn;
+
     this.killTree = o.killTree || defaultKillTree;
     this.probePort = o.probePort || defaultProbePort;
     this.fs = o.fs || fs;
@@ -164,10 +166,15 @@ class BackendProcess {
   }
 }
 
-/** Project .venv python path on Windows (relative to the project root). */
+/** Project .venv python path or bundled backend executable on Windows. */
 function defaultPythonPath(projectRoot, configured) {
   if (configured) return path.resolve(projectRoot, configured);
+  const bundledInResources = path.join(process.resourcesPath || '', 'backend-dist', 'kira-backend.exe');
+  if (fs.existsSync(bundledInResources)) return bundledInResources;
+  const bundledLocal = path.join(projectRoot, 'dist', 'backend', 'kira-backend.exe');
+  if (fs.existsSync(bundledLocal)) return bundledLocal;
   return path.join(projectRoot, '.venv', 'Scripts', 'python.exe');
 }
 
 module.exports = { BackendProcess, defaultProbePort, defaultKillTree, defaultPythonPath };
+

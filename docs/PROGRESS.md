@@ -397,8 +397,17 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 - Created `scripts/setup.bat` automating virtual environment creation, package installation, Playwright Chromium installation, Node.js avatar dependencies, initial `.env` setup, and `backend.doctor` probe.
 - Executed clean virtual environment test in an isolated temporary directory: verified clean installation of all requirements, verified critical imports (`backend.paths`, `backend.policy`, `backend.agent`), and verified clean teardown.
 
+### Sub-step M10.c: Electron Builder Configuration & Backend Wiring — done (2026-10-17)
+- Pinned `electron-builder: 26.15.3` in `avatar/package.json`.
+- Configured Windows packaging targets (`portable`, `dir`) with extraResources mapping bundled backend binaries from `dist/backend` to `resources/backend-dist`.
+- Updated `avatar/src/main/backend-process.js`:
+  - `defaultPythonPath()` auto-detects bundled `kira-backend.exe` in `process.resourcesPath/backend-dist/` or `dist/backend/` before falling back to local Python `.venv`.
+  - `BackendProcess` dynamically passes `['--headless']` (without `-m backend.main`) when spawning compiled executable binaries.
+- Added unit tests in `avatar/tests/controls.test.js` (116 Electron tests passing).
+
 ### NEXT STEP
-M10.c: electron-builder configuration (portable/unpacked build) pointing at the backend.
+M10.d: PyInstaller bundling of the backend (one-folder distribution with config & prompt assets).
+
 
 
 
