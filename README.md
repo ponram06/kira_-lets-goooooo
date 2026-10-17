@@ -61,6 +61,18 @@ kira/
 
 Run all commands from `d:\kira\`.
 
+### Automated One-Click Setup (Recommended)
+
+Run the automated setup script to configure the virtual environment, install locked dependencies, download Playwright Chromium, install Node packages, and run the doctor probe:
+
+```cmd
+scripts\setup.bat
+```
+
+---
+
+### Manual Setup Step-by-Step
+
 ### 1. Create and activate the virtual environment
 
 ```powershell
@@ -73,8 +85,9 @@ python -m venv .venv
 ### 2. Install dependencies
 
 ```powershell
-pip install -r requirements.txt
+pip install -r requirements.lock
 ```
+
 
 ### 3. Pre-download local fallback Whisper model (Optional but Recommended)
 
@@ -623,4 +636,29 @@ hit-mask) and `avatar/tests/controls.test.js` (menus, user config, off-screen
 reset, sizes, action feed, backend start/stop and kill-tree, settings CLI
 runner, control command schema).
 
-Current totals per milestone: see `docs/PROGRESS.md`.
+### Documentation Index
+- [Architecture & Diagrams](file:///d:/kira/docs/ARCHITECTURE.md)
+- [User Guide & Voice Commands](file:///d:/kira/docs/USER_GUIDE.md)
+- [Live Demo Script](file:///d:/kira/docs/DEMO_SCRIPT.md)
+- [System Limitations & Security](file:///d:/kira/docs/LIMITATIONS.md)
+- [Third-Party Notices & Licenses](file:///d:/kira/THIRD_PARTY_NOTICES.md)
+- [Any-Task Planner Hierarchy](file:///d:/kira/docs/ANY_TASK_PLANNER.md)
+- [Milestones Progress Log](file:///d:/kira/docs/PROGRESS.md)
+
+---
+
+## Packaging (M10)
+
+Kira can be bundled for standalone local Windows execution:
+- **Backend (PyInstaller one-folder build)**:
+  ```powershell
+  .venv\Scripts\pyinstaller.exe kira_backend.spec --noconfirm
+  ```
+  Produces `dist/backend/kira-backend.exe` with bundled configuration and runtime assets.
+- **Frontend (Electron Builder portable executable)**:
+  ```powershell
+  cd avatar
+  npm run build:portable
+  ```
+  Packs the Electron avatar and maps the bundled backend from `dist/backend/` into `resources/backend-dist/`.
+

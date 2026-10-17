@@ -385,7 +385,7 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 | **M8. 3D avatar (VRM)** | Done (Generated model) | Tested with mocks + Smoke verified | Three.js / @pixiv/three-vrm renderer, animations, lip sync, expressions, and 2D sprite fallback verified with 114 Node tests and hidden-window smoke test. Real user `.vrm` model requires manual visual test. |
 | **M9. Persona & polish** | Done | Tested with mocks + Needs hand test | Live Edge voice switching, notebook/Gotham themes, mode glow, startup greeting, and error handling verified with tests. Audio pitch/tone and theme visual polish require hand testing. |
 | **M10. Packaging** | Done | Verified locally (one-folder build) | Size-capped log rotation (5 MB), `scripts/setup.bat`, pinned `requirements.lock`, clean venv test, `electron-builder` configuration, and PyInstaller `kira-backend.exe` one-folder distribution built and smoke-tested. |
-| **M11. Documentation & Handoff** | Not started | Pending M10 | Architecture diagrams, user guide, demo script, third-party notices, and completion checklist. |
+| **M11. Documentation & Handoff** | Done | Complete & Verified | Full architecture diagrams, user voice guide, demo script, security limitations, third-party notices, and updated README. |
 
 ### Sub-step M10.a: Size-Capped Log Rotation — done (2026-10-17)
 - Implemented `paths.rotate_log_file(log_path, max_bytes, backup_count)` in `backend/paths.py`. Default 5 MB cap with 3 backup generations (`.1.jsonl`, `.2.jsonl`, `.3.jsonl`).
@@ -411,8 +411,21 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 - Collected all submodules and dynamic DLLs (`numpy`, `sounddevice`, `playwright`, `comtypes`, `pycaw`, `websockets`).
 - Successfully built `dist/backend/kira-backend.exe` on first attempt; smoke-tested with `--help` (clean exit code 0).
 
+---
+
+## M11. Documentation and Handoff — done (2026-10-17)
+
+### What was done
+- **`docs/ARCHITECTURE.md`**: Complete system architecture with Mermaid sequence and state diagrams covering Ears $\to$ Brain $\to$ Policy $\to$ Hands $\to$ Mouth & Face, mode lifecycle, token authentication, and WebSocket API protocol.
+- **`docs/USER_GUIDE.md`**: Voice command cheat sheet, global hotkeys (`Ctrl+Alt+K`, `Ctrl+Alt+H`, Backtick PTT), permission modes explanation, settings guide, and skills management.
+- **`docs/DEMO_SCRIPT.md`**: Step-by-step presentation script covering the canonical developer scenario, a deliberate error/policy violation test, an emergency kill switch mid-task demonstration, and live persona switching.
+- **`docs/LIMITATIONS.md`**: Explicitly documented security and platform limits: AST static checks are not a full sandbox (recommended container engines), WhatsApp delivery verification limitations, integrated GPU rendering limits & sprite fallback, SmartScreen warnings for unsigned builds, and process-based window detection.
+- **`THIRD_PARTY_NOTICES.md`**: Licenses for all 22 Python packages and Node.js dependencies; intellectual property and non-commercial disclaimer for the Ryuk character motifs; user instructions for VRM model licensing.
+- **`README.md`**: Updated with automated one-click setup (`scripts\setup.bat`), M10 packaging commands, and documentation index.
+
 ### NEXT STEP
-M11: Documentation and handoff — docs/ARCHITECTURE.md with Mermaid diagrams, docs/USER_GUIDE.md, docs/DEMO_SCRIPT.md, docs/LIMITATIONS.md, THIRD_PARTY_NOTICES.md, and updated README.md.
+Phase 2 Part B: Security and adversarial abuse testing (tests/test_abuse.py: path attacks, command chaining, prompt injection, forbidden mode escalations, script-runner bypasses, screen control safety, skill replay immutability, and WhatsApp read-back rules).
+
 
 
 
