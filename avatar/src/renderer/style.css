@@ -283,3 +283,48 @@ html, body {
 #vrm-canvas {
   display: none;
 }
+
+/* ── M9 themes (original CSS styling, no third-party artwork) ─────────────── */
+
+/* Notebook: black page, red ink, ruled lines */
+#container.theme-notebook #action-feed li {
+  background: rgba(8, 8, 8, 0.88);
+  color: #f2d7d7;
+  border-left: 2px solid #b91c1c;
+  border-bottom: 1px solid rgba(185, 28, 28, 0.35);
+  font-family: "Segoe Print", "Comic Sans MS", cursive;
+  letter-spacing: 0.2px;
+}
+#container.theme-notebook #speech-bubble {
+  background: rgba(10, 10, 10, 0.92);
+  color: #fde2e2;
+  border-color: #b91c1c;
+}
+
+/* Gotham dark: slate night with amber accents */
+#container.theme-gotham #action-feed li {
+  background: rgba(17, 24, 39, 0.9);
+  color: #e5e7eb;
+  border-left: 2px solid #f59e0b;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+#container.theme-gotham #speech-bubble {
+  background: rgba(17, 24, 39, 0.94);
+  color: #fef3c7;
+  border-color: #f59e0b;
+}
+
+/* Feed status colours stay readable in both themes */
+#container #action-feed li.error, #container #action-feed li.block { border-left-color: #ef4444; color: #fecaca; }
+#container #action-feed li.ask, #container #action-feed li.countdown { border-left-color: #f59e0b; }
+#container #action-feed li.done { border-left-color: #22c55e; }
+
+/* Mode indicator glow around the visible character: blue = Restricted, red = Free */
+#container.mode-restricted #avatar-canvas,
+#container.mode-restricted #vrm-canvas {
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.85));
+}
+#container.mode-free #avatar-canvas,
+#container.mode-free #vrm-canvas {
+  filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.9));
+}

@@ -573,6 +573,13 @@ Each persona in `config.yaml` has a `character:` profile: `display_name`, `rende
 
 Tests: `cd avatar; npm test` (VRM logic with a mocked WebGL) and the real-library smoke test in a hidden window: `cd avatar; $env:ELECTRON_RUN_AS_NODE=$null; npm run smoke:vrm` (uses a tiny generated test model).
 
+### M9. Persona and Polish
+
+- **Live persona switch** (tray or avatar menu) changes the tone (system prompt), the Edge voice (`character.voice`), the avatar (`character.renderer/asset`) and the theme at once. Kira is calm and strategic; Ryuk is playful and sarcastic with apple jokes. Both use exactly the same safety rules: personas live in `config.yaml` and carry no permission settings; the rules live in `policy.py`.
+- **Themes** (original CSS, no third-party artwork): `notebook` (black page, red ink action feed) and `gotham` (dark slate with amber accents), picked per character.
+- **Mode indicator**: a blue glow around the character in Restricted mode, red in Free mode (works for the sprite and the 3D model; the apple tint stays as well).
+- **Spoken startup greeting** in the persona's voice (`voice.startup_greeting`), **graceful spoken errors** (an internal error or "no model reachable" is said calmly and honestly, and the chat loop keeps running), and **proactive reminders** (timers and reminders are spoken and shown; ones missed while Kira was off are announced at start).
+
 ### Avatar Chat Box (Fallback Input)
 
 When a microphone is unavailable or muted, or when you prefer typing:

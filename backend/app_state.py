@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 from typing import Any, Optional
 
@@ -89,7 +90,34 @@ class AppState:
         if self._personas and name not in self._personas:
             return False
         self.persona = name
+        self._apply_voice()
         return True
+
+    _VOICE_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2}-[A-Za-z]+Neural$")
+
+    def _apply_voice(self) -> None:
+        """M9: each persona speaks with its own Edge voice (tone stays in the prompt)."""
+        voice = self.character_profile().get("voice") or ""
+        tts = getattr(self.voice_manager, "tts", None)
+        if tts is None or not voice:
+            return
+        if self._VOICE_RE.match(voice):
+            tts.edge_voice = voice
+        else:
+            logger.warning("Ignoring invalid Edge voice name for persona %s", self.persona)
+
+    @property
+    def greeting(self) -> str:
+        return str(self._personas.get(self.persona, {}).get("greeting") or f"{self.persona_display} is ready.")
+
+    def friendly_error(self, kind: str) -> str:
+        """Spoken line for failures, in the persona's tone (never hides that it failed)."""
+        lines = (self._personas.get(self.persona, {}) or {}).get("error_lines") or {}
+        defaults = {
+            "crash": "Something went wrong on my side, so I stopped safely. Nothing else will run. Please try again.",
+            "offline": "I can't reach any language model right now. Check the internet, or start Ollama for offline use.",
+        }
+        return str(lines.get(kind) or defaults.get(kind, defaults["crash"]))
 
     def set_persona(self, name: str) -> bool:
         """Switch persona live. Unknown names are refused."""

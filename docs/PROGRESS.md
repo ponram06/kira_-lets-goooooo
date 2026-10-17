@@ -350,6 +350,26 @@ M9: persona polish — per-persona Edge voice applied live, themes (notebook bla
 
 ---
 
+## M9. Persona and polish — done (2026-10-17)
+
+### What was done
+- Per-persona Edge voice applied live on switch (`AppState._apply_voice`, voice name validated); greeting and persona error lines (`greeting`, `friendly_error`).
+- `brain.run_agent_safely`: an agent exception or "no provider" becomes an honest spoken message; the chat loop no longer dies on an exception (it did before: `agent.run` had no try/except).
+- Spoken startup greeting (`voice.startup_greeting`, default on), shown in the bubble too.
+- Avatar themes `notebook` / `gotham` (`avatar/src/shared/theme.js` + CSS) and a blue (Restricted) / red (Free) glow around the character for both renderers.
+- Proactive reminders were already in M2 (spoken + on-screen, missed ones announced after restart); verified, unchanged.
+
+### Tests
+- pytest **469 passed, 1 skipped** (7 new in `tests/test_persona_polish.py`). Electron **114 passed** (3 new in `tests/theme.test.js`). VRM smoke PASS.
+
+### Known gaps
+- Voices, themes and glow colours need a look/listen by hand.
+
+### NEXT STEP
+M10: packaging — electron-builder portable/NSIS build with the backend bundled by PyInstaller (one-folder), Electron starts/stops the bundled backend, first-run wizard, log rotation, requirements.lock, scripts/setup.bat, clean-venv install test, SmartScreen notes.
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
@@ -360,4 +380,5 @@ M9: persona polish — per-persona Edge voice applied live, themes (notebook bla
 - **M6. Screen control**: Done, needs hand test with a vision provider.
 - **M7. Learned skills**: Done.
 - **M8. 3D avatar**: Done with a generated test model; needs your .vrm.
+- **M9. Persona and polish**: Done.
 

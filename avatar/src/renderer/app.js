@@ -57,10 +57,20 @@
     })
   });
   let character = null;
+  let currentMode = 'restricted';
+  const rootElem = document.getElementById('container');
+  const applyTheme = () => window.KiraTheme.apply(rootElem, character?.theme, currentMode);
+  const setModeUi = (mode) => {
+    currentMode = mode === 'free' ? 'free' : 'restricted';
+    renderer.setMode(currentMode);
+    applyTheme();
+  };
+  applyTheme();
   const applyCharacter = (c) => {
     if (!c || typeof c !== 'object') return;
     const same = character && character.id === c.id && character.renderer === c.renderer && character.asset === c.asset;
     character = c;
+    applyTheme();
     if (!same) renderer.setCharacter(c);
   };
   document.addEventListener('visibilitychange', () => renderer.setVisible(!document.hidden));
@@ -336,7 +346,7 @@
           renderer.setState(payload.state);
         }
         if (payload?.mode) {
-          renderer.setMode(payload.mode);
+          setModeUi(payload.mode);
         }
         applyCharacter(payload?.character);
         break;
@@ -375,7 +385,7 @@
       case 'mode':
       case 'mode_change':
         if (payload?.mode) {
-          renderer.setMode(payload.mode);
+          setModeUi(payload.mode);
         }
         break;
 

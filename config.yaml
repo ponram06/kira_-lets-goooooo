@@ -76,6 +76,10 @@ persona:
         framing: bust
         theme: gotham
         voice: "en-US-ChristopherNeural"
+      # Spoken when something fails (tone only; the facts stay honest)
+      error_lines:
+        crash: "Well, that broke. I stopped right there, nothing else ran. Try again, human."
+        offline: "No brain on the line. Internet's gone, and Ollama isn't running either. I'll just eat an apple."
       system_prompt: |
         You are Ryuk, a bored, sarcastic, and playful desktop companion for a developer.
         You drop occasional dry apple jokes and tease the human, but you ALWAYS perform
@@ -153,6 +157,8 @@ voice:
   hotkey: "`"
   # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
   kill_hotkey: "ctrl+alt+k"
+  # M9: speak the persona's greeting when Kira starts
+  startup_greeting: true
   # Microphone: null = system default, or a device name / index (see Settings)
   input_device: null
 

@@ -27,7 +27,7 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 # Reconfigure stdout to UTF-8 on Windows so emoji characters never crash the terminal
 if hasattr(sys.stdout, "reconfigure"):
@@ -82,6 +82,22 @@ def extract_emotion(text: str) -> tuple[Optional[str], str]:
     emotion = next((e for e in found if e in EMOTIONS), None)
     clean = re.sub(r"\s{2,}", " ", _EMOTION_RE.sub("", text)).strip()
     return emotion, clean
+
+
+async def run_agent_safely(agent: AgentRunner, messages: list[dict], state: Any) -> tuple[str, Optional[str]]:
+    """
+    M9: run one task; an unexpected exception or "no provider" becomes a calm
+    spoken message instead of killing the chat loop. Never claims success.
+    """
+    try:
+        reply, provider = await agent.run(messages)
+    except Exception as exc:
+        logger.exception("Agent task crashed: %s", type(exc).__name__)
+        _events.publish("tool.error", "Task stopped after an internal error", {"error": type(exc).__name__})
+        return state.friendly_error("crash"), None
+    if provider is None:
+        return state.friendly_error("offline"), None
+    return reply, provider
 
 
 def build_mode_manager(cfg: dict) -> ModeManager:
@@ -191,6 +207,11 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
 
     loop = asyncio.get_running_loop()
     state.bind_loop(loop)
+
+    # M9: spoken startup greeting in the persona's voice (also shown in the bubble)
+    if cfg.get("voice", {}).get("startup_greeting", True):
+        _events.publish("assistant.reply", f"{state.persona_display} greeted", {"text": state.greeting})
+        asyncio.create_task(voice_manager.speak(state.greeting))
     scheduler.start(loop)
     # Typed text from the avatar chat box joins the user queue tagged as chat_box
     state.set_text_sink(lambda text: loop.call_soon_threadsafe(user_queue.put_nowait, ("chat_box", text, None)))
@@ -257,7 +278,7 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
                 f"{state.persona_display} is thinking...",
                 {"user_input": user_input[:60]},
             )
-            reply, provider = await agent.run(messages)
+            reply, provider = await run_agent_safely(agent, messages, state)
             emotion, reply = extract_emotion(reply)
             if emotion:
                 _events.publish("assistant.emotion", f"Mood: {emotion}", {"emotion": emotion})
