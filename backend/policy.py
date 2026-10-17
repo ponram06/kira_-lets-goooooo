@@ -92,6 +92,9 @@ FORBIDDEN_CATEGORIES: frozenset[str] = frozenset(
 # affects_people    bool  — involves sending content to another person
 # outside_workspace bool  — the tool can touch paths outside workspace/
 # forbidden_category str | None — maps to FORBIDDEN_CATEGORIES
+# free_auto         bool  — (MEDIUM only) ask in Restricted, allow in Free
+#                           (privacy-sensitive or disruptive but harmless:
+#                           screenshots, locking the PC)
 # ---------------------------------------------------------------------------
 TOOL_REGISTRY: dict[str, dict] = {
     # ── LOW risk — always allowed ────────────────────────────────────────────
@@ -140,6 +143,42 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    # M2 system tools (no files touched, nothing sent to people)
+    "volume": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "brightness": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "system_info": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "set_timer": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "set_reminder": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "list_reminders": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "cancel_reminder": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
 
     # ── MEDIUM risk ──────────────────────────────────────────────────────────
     # run_command / run_script: allowlisted + inside workspace → auto-allow
@@ -153,11 +192,17 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
-    # take_screenshot: special case — ask in Restricted, allow in Free
+    # take_screenshot: ask in Restricted, allow in Free (saved inside workspace/)
     "take_screenshot": {
         "risk": RiskLevel.MEDIUM, "allowlisted": False,
         "affects_people": False, "outside_workspace": False,
-        "forbidden_category": None,
+        "forbidden_category": None, "free_auto": True,
+    },
+    # lock_pc: disruptive but harmless — ask in Restricted, allow in Free
+    "lock_pc": {
+        "risk": RiskLevel.MEDIUM, "allowlisted": False,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None, "free_auto": True,
     },
     # Reading a file outside workspace (not allowlisted → ask)
     "read_file_outside": {
@@ -568,8 +613,8 @@ def check(
 
     # 5–7. MEDIUM risk
     if risk == RiskLevel.MEDIUM:
-        # Special case: screenshots are privacy-sensitive even inside workspace
-        if action == "take_screenshot":
+        # free_auto (screenshots, lock): ask in Restricted, allow in Free
+        if entry.get("free_auto"):
             return "ask" if mode == Mode.RESTRICTED else "allow"
         # General MEDIUM: allow when allowlisted and inside workspace
         if allowlisted and not outside_workspace:

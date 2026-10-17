@@ -39,11 +39,12 @@ from backend.app_state import AppState
 from backend.config_loader import DEFAULT_CONFIG, load_config
 from backend.policy import KILL_SWITCH, ModeManager
 from backend.providers import ProviderManager
+from backend.reminders import ReminderScheduler, register_scheduler
 from backend.secrets_guard import PIN_ENV
 from backend.server import WebSocketServer
 from backend.tools.voice_stub import register_voice_manager
 from backend import user_config
-from backend.voice import VoiceManager, async_shared_confirm
+from backend.voice import VoiceManager, async_shared_confirm, list_input_devices
 
 _DEFAULT_CONFIG = DEFAULT_CONFIG
 
@@ -129,7 +130,19 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
         provider_manager=manager,
         mode_manager=mode_manager,
         confirm_callback=confirm_cb,
+        speak=voice_manager.speak,
     )
+
+    # No microphone → the avatar offers the typed chat box instead
+    state.mic_available = bool(list_input_devices())
+
+    # Timers and reminders (survive restarts; announced by voice + on screen)
+    async def on_reminder(item: dict) -> None:
+        print(f"\n[{state.persona_display}]: {item['spoken']}")
+        await voice_manager.speak(item["spoken"])
+
+    scheduler = ReminderScheduler(on_due=on_reminder)
+    register_scheduler(scheduler)
 
     history: deque[dict] = deque(maxlen=memory_limit)
 
@@ -157,6 +170,9 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
 
     loop = asyncio.get_running_loop()
     state.bind_loop(loop)
+    scheduler.start(loop)
+    # Typed text from the avatar chat box joins the same queue as terminal input
+    state.set_text_sink(lambda text: loop.call_soon_threadsafe(user_queue.put_nowait, ("typed", text, None)))
     voice_manager.start_hotkey_listener(loop)
 
     async def on_voice_utterance(utterance: str, speech_end_time: float) -> None:
@@ -225,11 +241,13 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
 
             tag: str = f"[{provider}]" if provider else "[unavailable]"
             print(f"\n{state.persona_display} {tag}:\n{reply}")
+            _events.publish("assistant.reply", f"{state.persona_display} replied", {"text": reply[:1000]})
 
             await voice_manager.speak(reply, speech_end_time=speech_end_time)
 
     finally:
         shutdown_task.cancel()
+        scheduler.stop()
         ws_server.stop()
         voice_manager.stop_hotkey_listener()
         voice_manager.stop_speech()

@@ -282,3 +282,46 @@ async def test_shutdown_command_requests_shutdown(harness):
     assert (await _ack(ws, "shutdown"))["status"] == "executed"
     await asyncio.wait_for(st.wait_shutdown(), timeout=2)
     await ws.close()
+
+
+# ── M2: typed chat input, countdown cancel, forwarded events ────────────────
+
+def test_submit_text_goes_to_sink():
+    st = AppState(CFG, voice_manager=FakeVoice())
+    assert st.submit_text("hello") is False          # no sink yet
+    got = []
+    st.set_text_sink(got.append)
+    assert st.submit_text("  open   notepad ") is True
+    assert got == ["open notepad"]
+    assert st.submit_text("   ") is False
+
+
+async def test_user_text_and_cancel_countdown_commands(harness):
+    got = []
+    harness["state"].set_text_sink(got.append)
+    ws, snap = await _session(harness)
+    assert "mic_available" in snap
+    await ws.send(json.dumps({"command": "user_text", "text": "what time is it"}))
+    assert (await _ack(ws, "user_text"))["status"] == "executed"
+    await ws.send(json.dumps({"command": "user_text", "text": "x" * 3000}))
+    assert (await _ack(ws, "user_text"))["status"] == "invalid"
+    await ws.send(json.dumps({"command": "cancel_countdown"}))
+    assert (await _ack(ws, "cancel_countdown"))["status"] == "executed"
+    assert got == ["what time is it"]
+    await ws.close()
+
+
+def test_new_events_are_forwarded():
+    server = WebSocketServer(config={"server": {"enabled": False, "token_file": ".kira/test_token2"}})
+    sent = []
+
+    class Q:
+        def put_nowait(self, payload):
+            sent.append(json.loads(payload))
+
+    server._clients = {object(): Q()}
+    server._process_and_broadcast({"type": "policy.countdown", "text": "", "data": {"label": "Sending to Sam", "seconds_left": 2}})
+    server._process_and_broadcast({"type": "reminder.due", "text": "", "data": {"text": "tea", "kind": "timer", "missed": False}})
+    server._process_and_broadcast({"type": "assistant.reply", "text": "", "data": {"text": "Hello"}})
+    assert [m["type"] for m in sent] == ["countdown", "reminder", "reply"]
+    assert sent[0]["seconds_left"] == 2 and sent[1]["text"] == "tea" and sent[2]["text"] == "Hello"

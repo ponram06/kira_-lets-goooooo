@@ -1,30 +1,37 @@
-# Core runtime
-openai>=1.0.0
-python-dotenv>=1.0.0
-pyyaml>=6.0.0
+# All versions pinned (working rule 8). Update deliberately, then run the
+# full test suite and `python -m backend.doctor`.
 
-# httpx is required by openai; pin so test helpers can construct
-# httpx.Request / httpx.Response for mock exceptions
-httpx>=0.24.0
+# Core runtime
+openai==3.31.0
+python-dotenv==1.2.4
+pyyaml==6.0.3
+
+# httpx is required by openai; also used by the doctor and Settings key tests
+httpx==0.28.1
 
 # Testing
-pytest>=7.4.0
-pytest-asyncio>=0.23.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
 
 # Voice (Step 4)
-sounddevice>=0.4.6
-numpy>=1.24.0
-pynput>=1.7.6
-edge-tts>=6.1.0
-pyttsx3>=2.90
-miniaudio>=1.60
-faster-whisper>=1.0.0
+sounddevice==0.5.6
+numpy==2.5.4
+pynput==1.8.2
+edge-tts==7.3.1
+pyttsx3==2.99
+miniaudio==1.71
+faster-whisper==1.2.1
 
 # VS Code visible typing tool (Step 5)
-pyautogui>=0.9.54       # keyboard shortcuts (Ctrl+S, Ctrl+V) and FAILSAFE mouse corner abort
-pygetwindow>=0.0.9      # find and activate VS Code window by title
-pyperclip>=1.8.2        # clipboard read/write for multi-line code paste (avoids auto-indent issues)
+pyautogui==0.9.54       # keyboard shortcuts (Ctrl+S, Ctrl+V) and FAILSAFE mouse corner abort
+pygetwindow==0.0.9      # find and activate VS Code window by title
+pyperclip==1.11.0       # clipboard read/write for multi-line code paste (avoids auto-indent issues)
 
 # WebSocket server (Step 6)
 websockets==17.2        # lightweight asyncio WebSocket server for live avatar feed
 
+# System tools (M2)
+pycaw==20260927         # volume up / down / mute (Windows Core Audio)
+comtypes==1.4.17        # COM bridge used by pycaw
+psutil==7.2.2           # CPU, RAM and battery for system info
+screen-brightness-control==0.27.2   # display brightness (laptop panels and DDC/CI monitors)

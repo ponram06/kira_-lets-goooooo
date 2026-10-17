@@ -113,6 +113,10 @@ tools:
   type_interval: 0.04
   # Seconds the visible CMD window remains open after command execution (default: 20s)
   cmd_pause_seconds: 20
+  # M2 system tools
+  volume_step: 10            # percent per "volume up/down"
+  brightness_step: 10        # percent per "brightness up/down"
+  screenshots_dir: "screenshots"   # inside workspace/ (git-ignored)
 
 # =============================================================================
 # Voice settings (Step 4)

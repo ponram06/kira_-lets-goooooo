@@ -48,6 +48,8 @@ class AppState:
         self._apply_persona(str(persona_cfg.get("name", "kira")).lower())
 
         self.sleeping: bool = False
+        self.mic_available: bool = True
+        self._text_sink = None          # set by the chat loop: fn(text) -> None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._shutdown: Optional[asyncio.Event] = None
 
@@ -113,6 +115,21 @@ class AppState:
         if self.sleeping:
             self.set_sleeping(False)
 
+    # ── typed input (chat box fallback when the mic is unavailable) ─────────
+
+    MAX_TEXT = 2000
+
+    def set_text_sink(self, sink) -> None:
+        self._text_sink = sink
+
+    def submit_text(self, text: str) -> bool:
+        """Queue typed text from the avatar chat box as if typed in the terminal."""
+        text = " ".join(str(text or "").split())[: self.MAX_TEXT]
+        if not text or self._text_sink is None:
+            return False
+        self._text_sink(text)
+        return True
+
     # ── settings reload (after the Settings window saves) ───────────────────
 
     def reload_settings(self) -> None:
@@ -162,6 +179,7 @@ class AppState:
             "personas": self.personas,
             "mic_muted": self.mic_muted,
             "sleeping": self.sleeping,
+            "mic_available": self.mic_available,
             "free_mode_available": bool(mm and mm.free_mode_available),
             "free_timeout": int(mm.free_timeout) if mm else 0,
         }

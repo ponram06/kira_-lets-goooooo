@@ -476,6 +476,27 @@ class WebSocketServer:
         elif event_type == "sleep.change":
             formatted = {"type": "sleep_change", "sleeping": bool(data.get("sleeping")), "timestamp": ts}
 
+        elif event_type == "policy.countdown":
+            formatted = {
+                "type": "countdown",
+                "label": truncate_text(str(data.get("label", "")), 80),
+                "seconds_left": int(data.get("seconds_left", 0) or 0),
+                "cancelled": bool(data.get("cancelled", False)),
+                "timestamp": ts,
+            }
+
+        elif event_type == "reminder.due":
+            formatted = {
+                "type": "reminder",
+                "text": truncate_text(str(data.get("text", "")), 200),
+                "kind": str(data.get("kind", "reminder")),
+                "missed": bool(data.get("missed", False)),
+                "timestamp": ts,
+            }
+
+        elif event_type == "assistant.reply":
+            formatted = {"type": "reply", "text": truncate_text(str(data.get("text", "")), 1000), "timestamp": ts}
+
         elif event_type == "app.shutdown":
             formatted = {"type": "shutdown", "timestamp": ts}
 
@@ -704,6 +725,7 @@ class WebSocketServer:
     _COMMANDS = frozenset({
         "free_mode_request", "set_persona", "set_mic_muted", "set_sleep",
         "get_status", "reload_settings", "shutdown",
+        "user_text", "cancel_countdown",
     })
 
     async def _handle_control_command(self, websocket: ServerConnection, cmd: str, data: dict) -> None:
@@ -755,6 +777,17 @@ class WebSocketServer:
 
         elif cmd == "get_status":
             ack["snapshot"] = self.get_snapshot()
+
+        elif cmd == "user_text":
+            text = data.get("text")
+            if st is None or not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                ack["status"] = "invalid"
+            else:
+                ack["status"] = "executed" if st.submit_text(text) else "unavailable"
+
+        elif cmd == "cancel_countdown":
+            from backend.countdown import request_cancel
+            request_cancel()
 
         elif cmd == "shutdown":
             if st is None:
