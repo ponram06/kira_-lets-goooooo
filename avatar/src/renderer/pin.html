@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self';">
+  <title>Enable Free mode</title>
+  <link rel="stylesheet" href="dialog.css">
+</head>
+<body>
+  <main class="dialog">
+    <h1>Enable Free mode?</h1>
+    <p>Kira will ask fewer questions. Messages are sent after a 3-second countdown you can cancel.
+      Formatting disks, security settings and payments stay blocked.</p>
+    <p id="timeout-note">Free mode switches back to Restricted automatically.</p>
+    <form id="pin-form" autocomplete="off">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12"
+             autocomplete="off" required autofocus>
+      <p id="message" role="status" aria-live="polite"></p>
+      <div class="buttons">
+        <button type="button" id="cancel">Cancel</button>
+        <button type="submit" id="enable" class="danger">Enable Free mode</button>
+      </div>
+    </form>
+  </main>
+  <script src="pin.js"></script>
+</body>
+</html>

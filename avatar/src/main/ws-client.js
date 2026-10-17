@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
-const { createStopMessage } = require('../shared/schema');
+const { createStopMessage, createCommand, isValidCommand } = require('../shared/schema');
 
 class KiraWsClient {
   /**
@@ -32,6 +32,8 @@ class KiraWsClient {
     this.reconnectTimer = null;
     this.isDestroyed = false;
     this.authenticated = false;
+    this.pending = new Map();   // request_id → { resolve, timer }
+    this._nextId = 1;
   }
 
   /**
@@ -114,6 +116,17 @@ class KiraWsClient {
 
     if (!payload || typeof payload !== 'object') return;
 
+    // Replies to request(): resolve the matching promise, do not forward
+    if (payload.type === 'command_ack' && payload.request_id !== undefined) {
+      const entry = this.pending.get(String(payload.request_id));
+      if (entry) {
+        clearTimeout(entry.timer);
+        this.pending.delete(String(payload.request_id));
+        entry.resolve(payload);
+        return;
+      }
+    }
+
     const type = payload.type || payload.event;
     if (type) {
       this.onEvent(type, payload);
@@ -126,6 +139,7 @@ class KiraWsClient {
    * Handles socket disconnection or error.
    */
   _handleDisconnect() {
+    this._failPending();
     this._cleanupSocket();
     this._emitOffline();
     this._scheduleReconnect();
@@ -144,6 +158,65 @@ class KiraWsClient {
       }
     }
     return false;
+  }
+
+  /**
+   * Sends a validated control command and resolves with the backend's ack
+   * (or {status: 'offline' | 'timeout' | 'invalid'}). Payload contents are
+   * never logged.
+   * @param {string} command
+   * @param {object} fields
+   * @param {number} timeoutMs
+   * @returns {Promise<object>}
+   */
+  request(command, fields = {}, timeoutMs = 5000) {
+    const id = `r${this._nextId++}`;
+    const msg = createCommand(command, fields, id);
+    if (!isValidCommand(msg)) return Promise.resolve({ status: 'invalid' });
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.authenticated) {
+      return Promise.resolve({ status: 'offline' });
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        resolve({ status: 'timeout' });
+      }, timeoutMs);
+      this.pending.set(id, { resolve, timer });
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        resolve({ status: 'offline' });
+      }
+    });
+  }
+
+  /** Fire-and-forget command (used for shutdown during quit). */
+  send(command, fields = {}) {
+    const msg = createCommand(command, fields);
+    if (!isValidCommand(msg)) return false;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.authenticated) {
+      try {
+        this.ws.send(JSON.stringify(msg));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  isConnected() {
+    return Boolean(this.ws && this.ws.readyState === WebSocket.OPEN && this.authenticated);
+  }
+
+  _failPending() {
+    for (const [id, entry] of this.pending) {
+      clearTimeout(entry.timer);
+      entry.resolve({ status: 'offline' });
+      this.pending.delete(id);
+    }
   }
 
   _emitOffline() {
@@ -189,6 +262,7 @@ class KiraWsClient {
    */
   destroy() {
     this.isDestroyed = true;
+    this._failPending();
     this._clearReconnectTimer();
     this._cleanupSocket();
   }

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self';">
+  <title>Kira Settings</title>
+  <link rel="stylesheet" href="dialog.css">
+</head>
+<body>
+  <main class="settings">
+    <h1>Kira Settings</h1>
+    <p>Keys and the PIN are saved only to the local <code>.env</code> file and are never logged.</p>
+
+    <section>
+      <h2>AI providers</h2>
+      <p class="hint">Tried in this order. The list comes from config.yaml.</p>
+      <div id="providers"></div>
+    </section>
+
+    <section>
+      <h2>Free mode</h2>
+      <label for="pin">PIN (4–12 digits)</label>
+      <input id="pin" type="password" inputmode="numeric" maxlength="12" autocomplete="off">
+      <div id="pin-hint" class="hint"></div>
+      <label for="free-timeout">Return to Restricted after (minutes)</label>
+      <input id="free-timeout" type="number" min="1" max="1440" step="1">
+    </section>
+
+    <section>
+      <h2>Voice</h2>
+      <label for="mic">Microphone</label>
+      <select id="mic"></select>
+      <label for="edge-voice">Voice (Edge TTS name)</label>
+      <input id="edge-voice" type="text" maxlength="128" spellcheck="false">
+      <label for="ptt">Push-to-talk key</label>
+      <input id="ptt" type="text" maxlength="16" spellcheck="false">
+      <div class="hint">One key, for example the backtick key or F9. Applies after restarting the backend.</div>
+      <label for="persona">Persona</label>
+      <select id="persona"></select>
+    </section>
+
+    <section>
+      <h2>App</h2>
+      <label class="check"><input id="start-with-windows" type="checkbox"> Start Kira with Windows</label>
+      <label for="hotkey">Show / hide avatar hotkey</label>
+      <input id="hotkey" type="text" maxlength="40" spellcheck="false">
+      <div class="hint">Format: Ctrl+Alt+H</div>
+    </section>
+
+    <section>
+      <h2>Doctor</h2>
+      <p class="hint">Checks Python, packages, the VS Code command, Ollama, microphone, keys, PIN, git-ignore, logs and internet.</p>
+      <button id="run-doctor" type="button">Run checks</button>
+      <ul id="doctor-list"></ul>
+    </section>
+
+    <div class="sticky-bar">
+      <div id="save-status" class="status" role="status" aria-live="polite"></div>
+      <button id="restart" type="button">Restart backend</button>
+      <button id="save" type="button" class="primary">Save</button>
+    </div>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

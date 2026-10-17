@@ -723,6 +723,19 @@ def parse_hotkey_spec(spec: str) -> Any:
     return keyboard.KeyCode.from_char(s)
 
 
+def list_input_devices() -> list[dict]:
+    """Names and indexes of input-capable audio devices (for the Settings window)."""
+    devices: list[dict] = []
+    try:
+        default_in = sd.default.device[0] if sd.default.device else None
+        for idx, dev in enumerate(sd.query_devices()):
+            if int(dev.get("max_input_channels", 0)) > 0:
+                devices.append({"index": idx, "name": str(dev.get("name", "")), "default": idx == default_in})
+    except Exception as exc:
+        logger.debug("Could not list input devices: %s", exc)
+    return devices
+
+
 class VoiceManager:
     """
     Coordinates Voice Ears (STT), Mouth (TTS), Hotkeys, and Safety Gates.
@@ -749,6 +762,12 @@ class VoiceManager:
         # Mute state
         self.is_muted_mic = False
         self.is_muted_voice = False
+
+        # Microphone: None = system default, or a device name / index (Settings)
+        self.input_device = voice_cfg.get("input_device")
+
+        # Called on every push-to-talk press (AppState uses it to wake from sleep)
+        self.on_ptt_press: Optional[Callable[[], None]] = None
 
         # Privacy notice
         self.privacy_notice = voice_cfg.get(
@@ -871,6 +890,13 @@ class VoiceManager:
                 return
             self._talk_key_held = True
 
+            # Wake the avatar if it is asleep (sleep never disables push-to-talk)
+            if self.on_ptt_press is not None:
+                try:
+                    self.on_ptt_press()
+                except Exception as exc:
+                    logger.debug("on_ptt_press hook failed: %s", exc)
+
             # Interrupt ongoing Kira speech immediately
             self.stop_speech()
 
@@ -938,6 +964,7 @@ class VoiceManager:
 
         try:
             self._input_stream = sd.InputStream(
+                device=self.input_device,
                 samplerate=16000,
                 channels=1,
                 dtype="int16",
@@ -1020,7 +1047,7 @@ class VoiceManager:
                     await self.on_utterance(utterance, speech_end_time)
                     return utterance
                 else:
-                    free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
+                    free_msg = "Free mode cannot be enabled by voice. Use Mode, then Free, in the avatar menu."
                     print(f"[Kira]: {free_msg}", flush=True)
                     await self.speak(free_msg)
                     return None

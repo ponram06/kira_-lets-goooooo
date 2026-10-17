@@ -20,18 +20,17 @@
     <!-- Character drag area -->
     <div id="drag-handle" title="Drag to move avatar"></div>
 
-    <!-- Hover menu -->
-    <div id="hover-menu-container">
-      <button id="hover-trigger" title="Options">⚙</button>
-      <div id="menu-items">
-        <button id="btn-stop" class="menu-btn stop-btn">Stop</button>
-        <button id="btn-lock" class="menu-btn">Lock Position</button>
-        <button id="btn-sleep" class="menu-btn">Sleep</button>
-        <button id="btn-mute" class="menu-btn" disabled>Mute Mic</button>
-      </div>
-    </div>
+    <!-- Control button: appears near the character on hover, opens the avatar menu -->
+    <button id="control-btn" title="Kira menu (or right-click the character)" aria-label="Kira menu">⋯</button>
+
+    <!-- Status badges (mic muted / sleeping / offline) -->
+    <div id="status-badges" aria-live="polite"></div>
+
+    <!-- Action feed: last few tool events (not clickable, stays click-through) -->
+    <ul id="action-feed" aria-label="Action feed"></ul>
   </div>
 
+  <script src="../shared/feed.js"></script>
   <script src="sprite-renderer.js"></script>
   <script src="speech-bubble.js"></script>
   <script src="app.js"></script>

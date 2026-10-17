@@ -1,4 +1,4 @@
-# Kira — AI Desktop Assistant (Steps 1 through 6: Voice Pipeline & WebSocket Server)
+# Kira — AI Desktop Assistant (Steps 1–7 + M1 App Controls)
 
 Autonomous desktop assistant prototype with brain core, safety policy layer, tool suite, agent loop, real-time voice pipeline (Ears & Mouth), and WebSocket server for desktop avatar streaming.
 
@@ -10,8 +10,16 @@ Autonomous desktop assistant prototype with brain core, safety policy layer, too
 kira/
 ├── backend/
 │   ├── __init__.py
+│   ├── main.py           # Entry point: python -m backend.main [--headless]
 │   ├── providers.py      # LLM provider manager (ordered fallback + cooldowns)
-│   ├── brain.py          # Unified REPL (typed + voice PTT input + WebSocket server)
+│   ├── brain.py          # Chat loop (typed + voice PTT input + WebSocket server)
+│   ├── app_state.py      # M1: live persona / mic mute / sleep / shutdown
+│   ├── config_loader.py  # M1: config.yaml + user settings (whitelisted overrides)
+│   ├── user_config.py    # M1: per-user settings.json (outside the repo)
+│   ├── envfile.py        # M1: safe .env read/update + key masking
+│   ├── secrets_guard.py  # M1: redacts keys and the PIN from logs, events, stdout, WebSocket
+│   ├── settings_cli.py   # M1: JSON helper used by the Settings window
+│   ├── doctor.py         # M1: python -m backend.doctor
 │   ├── server.py         # Step 6: WebSocket server for live avatar feed & control
 │   ├── policy.py         # Permission layer (check / ModeManager / workspace guard)
 │   ├── audit.py          # Audit logging (logs/actions.jsonl) & live event feed
@@ -86,6 +94,16 @@ notepad .env
 Add your keys (`GROQ_API_KEY` for hosted Whisper STT and LLM, `OPENROUTER_API_KEY`, etc.).  
 Ollama and faster-whisper run locally without an API key.
 
+Set `KIRA_FREE_MODE_PIN` (4–12 digits, your own choice) if you want Free mode.
+Without it, Free mode stays disabled. You can also set keys and the PIN later in
+the avatar's **Settings** window.
+
+### 5. Check your setup
+
+```powershell
+.venv\Scripts\python.exe -m backend.doctor
+```
+
 ---
 
 ## Running Kira
@@ -93,10 +111,13 @@ Ollama and faster-whisper run locally without an API key.
 ### Unified Chat & Voice REPL
 
 ```powershell
-python -m backend.brain
+.venv\Scripts\python.exe -m backend.main
 ```
 
-Kira operates in **Restricted mode** by default.
+(`run.bat` does the same.) The avatar app (`cd avatar; npm start`) starts the
+backend by itself in headless mode if it is not already running.
+
+Kira always starts in **Restricted mode**.
 
 #### Voice Controls
 * **Push-to-Talk (PTT)**: Hold **`` ` ``** (backtick, configurable in `config.yaml`) to speak. Release to transcribe and send.
@@ -104,14 +125,14 @@ Kira operates in **Restricted mode** by default.
 * **Stop Word**: Saying **`"stop"`** or **`"Kira stop"`** immediately halts speech and activates the kill switch locally before sending to the LLM.
 * **Mode Commands by Voice**:
   * Saying `"restricted mode"` immediately switches to Restricted mode (Apple turns **green**).
-  * Saying `"go to free mode"` or `"free mode"` prompts for the security PIN (`1684`). Speak or type `1684` to enter Free mode (Apple turns **red**).
+  * Saying `"free mode"` does **not** switch modes. Kira tells you to use the avatar menu (**Mode → Free…**), which asks for your PIN in a masked dialog. The PIN is never spoken, typed in the terminal, sent to speech recognition or logged.
 
 #### Built-in Terminal Commands
 * `restricted mode` — Switch immediately to Restricted mode (Apple glow is green).
-* `free mode` — Prompt for the security PIN (`1684`) to switch to Free mode (Apple glow is red; auto-reverts after timeout).
+* `free mode` — Explains how to enter Free mode (avatar menu → Mode → Free…, PIN dialog).
 * `stop` — Activate the global **Kill Switch** (blocks all tool actions and audio instantly).
 * `resume` / `reset` — Reset the Kill Switch.
-* `exit` or `quit` — Close the REPL.
+* `exit` or `quit` — Close the REPL (terminal mode only; in the avatar app use **Quit**).
 
 ---
 
@@ -146,7 +167,7 @@ Kira operates in **Restricted mode** by default.
 To manually verify the complete voice pipeline on Windows:
 
 ### Test 1: Push-to-Talk Speech & Narration
-1. Run `python -m backend.brain`.
+1. Run `.venv\Scripts\python.exe -m backend.main`.
 2. Hold **`F8`** (or configured hotkey) and say: `"What is the capital of France?"`.
 3. Release **`F8`**.
 4. **Verify**:
@@ -164,12 +185,13 @@ To manually verify the complete voice pipeline on Windows:
 2. **Verify**: Audio halts immediately and terminal prints:
    `[EMERGENCY KILL SWITCH: Ctrl+Alt+K pressed. All actions and audio halted.]`
 
-### Test 4: Voice Free Mode & PIN Protection
-1. Hold **`` ` ``** and say: `"go to free mode"`.
-2. **Verify**: Kira prompts for the PIN out loud and on screen: `"Please enter the PIN to enable Free mode."`.
-3. Hold **`` ` ``** and say `"one six eight four"` (or type `1684` in the terminal).
-4. **Verify**: Kira announces `"PIN verified. Switched to Free mode."`, the Ryuk avatar's apple turns **crimson red**, and Free mode activates (with a 600s auto-revert timer).
-5. Say or type `"restricted mode"`. Kira switches back immediately and the avatar's apple turns **emerald green**.
+### Test 4: Free Mode & PIN Protection
+1. Set `KIRA_FREE_MODE_PIN` in Settings (or `.env`).
+2. Right-click the avatar → **Mode → Free… (asks for PIN)**.
+3. **Verify**: a dialog explains Free mode and asks for the PIN in a masked field.
+4. Enter a wrong PIN three times. **Verify**: "Too many wrong PINs. Try again in 60 s."; even the right PIN is refused during the lockout.
+5. After the lockout, enter the right PIN. **Verify**: the apple turns red and Free mode auto-reverts after the configured timeout.
+6. Say or type `"restricted mode"`. Kira switches back immediately.
 
 ### Test 5: Non-blocking Spoken Read-Back & Confirmation
 1. Ask Kira to perform an action outside allowlist requiring confirmation (e.g., delete a file).
@@ -252,7 +274,7 @@ Step 6 provides a lightweight, pure-asyncio WebSocket server for live action fee
 
 1. In **Terminal 1**, start Kira:
    ```powershell
-   python -m backend.brain
+   .venv\Scripts\python.exe -m backend.main
    ```
 2. In **Terminal 2**, run the test client:
    ```powershell
@@ -288,7 +310,7 @@ Step 7 implements a lightweight, transparent 2D desktop avatar window featuring 
 - **2D Canvas Renderer**: 30 FPS capped canvas loop rendering breathing, leaning, apple/eye radial glows, and mouth bobbing synchronized to backend speech loudness.
 - **Speech Bubble**: Dark rounded speech bubble with thin red border and monospace typography. Enforces text-only output (`textContent`, strictly no `innerHTML`), 140-character maximum truncation with ellipsis, and a 3-second auto-fade timer.
 - **Mode Indicator Ring**: Displays mode aura (Blue for `RESTRICTED`, Red for `FREE`). Character maintains its native amber/red glow and is never tinted blue.
-- **System Tray & Kill Switch**: System tray icon with Show/Hide, Lock Position, and Quit controls. A dedicated **Stop** button in the hover menu and tray triggers the global emergency kill switch.
+- **System Tray, Avatar Menu & Kill Switch**: see **M1 App Controls** below.
 
 ### Custom Character Assets & Glow Configuration
 - Put your character sprite at `avatar/assets/ryuk.png` (git-ignored). If absent, a neutral geometric placeholder is rendered.
@@ -324,20 +346,92 @@ To test all avatar animations and interactions in isolation without running LLMs
 3. Observe:
    - Initial greeting bubble appears from `avatar.config.json` and auto-fades after 3 seconds.
    - Character smoothly transitions through states: `idle` (breathing) -> `listening` (forward tilt, brighter eye glow) -> `thinking` (apple glow pulse) -> `working` (fast apple pulse and sway) -> `speaking` (speech bubble appears, character bobs with audio loudness).
-   - Click the gear icon to open the hover menu; click **Stop** and observe immediate kill switch activation in Terminal 1.
+   - Hover the character: a small ⋯ button appears and fades about 2 s after you leave. Click it (or right-click the character) and choose **Stop task**; observe immediate kill switch activation in Terminal 1.
    - Drag the character to any screen corner or secondary monitor. Release to verify bounds clamping.
    - Click outside the character in an open editor window to verify clicks pass through seamlessly.
 
 ### Running with Full Kira Voice Assistant
-1. In **Terminal 1**, start Kira:
-   ```powershell
-   .venv\Scripts\python.exe -m backend.brain
-   ```
-2. In **Terminal 2**, launch the avatar:
-   ```powershell
-   cd avatar
-   npm start
-   ```
+```powershell
+cd avatar
+npm start
+```
+The avatar starts the backend (`python -m backend.main --headless`, output in
+`logs/backend.log`). To see the backend in a terminal instead, start `run.bat`
+first; the avatar then connects to it and on Quit only asks it to shut down.
+
+---
+
+## M1 App Controls
+
+### Tray icon
+Show/hide avatar · Mute/unmute microphone · Persona (Kira / Ryuk) · Settings… ·
+Stop current task · Quit Kira. Left-click the tray icon to show/hide.
+
+### Avatar menu (hover ⋯ button or right-click the character)
+Mute · Sleep/Wake · Persona · Mode (Restricted at once; **Free…** opens the PIN
+dialog) · Size (small / medium / large) · Lock position · Show action feed ·
+Settings… · Stop task · Quit Kira.
+
+- **Click-through**: only the character and the ⋯ button take the mouse.
+- **Sleep is not mute**: sleep dims the avatar (renders at 5 FPS); push-to-talk
+  still works and wakes it. Mute is a separate switch.
+- **Action feed**: last 4 events (tool started ▶ / done ✓ / asks ? / blocked ⛔ /
+  countdown ⏱ / errors ✗) in the bottom-left corner.
+- **Quit** asks the backend to shut down, waits up to 5 s
+  (`backend.shutdown_timeout_ms` in `avatar/avatar.config.json`), then ends the
+  whole process tree, so no stray `python.exe` stays behind.
+
+### What is remembered
+Per-user folder `%APPDATA%\Kira\` (override with the `KIRA_USER_DIR` variable),
+never inside the repo:
+
+| File | Written by | Contents |
+|------|-----------|----------|
+| `avatar.json` | avatar app | position, size, lock, feed visible, start with Windows (default off), show/hide hotkey (default `Ctrl+Alt+H`) |
+| `settings.json` | backend | persona, mic mute, your overrides of config.yaml (models, microphone, voice, push-to-talk key, Free-mode timeout) |
+
+The permission **mode is never saved**: every launch starts Restricted. If the
+saved position is off every connected screen, the avatar resets to bottom-right.
+
+### Settings window
+Opened from the tray or avatar menu. Closing it only hides it.
+- Key and model fields are built from `providers:` in `config.yaml` (add a
+  provider there and it shows up with no UI change). Each has a **Test** button
+  (OpenRouter uses `key_test_path: "/key"` because its `/models` is public).
+- Masked Free-mode PIN field, Free-mode timeout, microphone, Edge voice,
+  push-to-talk key, persona, start with Windows, show/hide hotkey, **Doctor**.
+- Keys and the PIN are written only to the local `.env`, passed to the helper
+  through stdin (never command-line arguments), and never logged. A changed PIN
+  works immediately; key, model, microphone and push-to-talk changes need
+  **Restart backend**.
+
+### Doctor
+```powershell
+.venv\Scripts\python.exe -m backend.doctor          # report; exit code 1 on a required failure
+.venv\Scripts\python.exe -m backend.doctor --json   # used by Settings
+```
+Checks Python 3.11+, packages from requirements.txt, the `code` command,
+Ollama and `qwen2.5:7b`, the microphone, provider keys and `KIRA_FREE_MODE_PIN`
+(presence only, never printed), that `.env` and `logs/` are git-ignored, that no
+key or PIN appears in `logs/`, and internet access.
+
+### Secret protection
+`backend/secrets_guard.py` knows every value in `.env` (keys and the PIN) and
+replaces them with `[REDACTED]` in log records (including tracebacks), printed
+output, event text and data, `logs/events.jsonl` and every WebSocket payload.
+`tests/test_no_secret_leaks.py` proves it.
+
+### M1 manual checklist (what automated tests cannot see)
+1. `cd avatar; npm start` → avatar appears bottom-right, tray icon appears, `logs/backend.log` fills.
+2. Hover the character → ⋯ appears, fades ~2 s after leaving. Click empty window areas → clicks reach the app below.
+3. Right-click the character → avatar menu. Try Size → Large, Lock position (dragging stops), hide/show action feed.
+4. Tray → Persona → Ryuk; the next reply uses Ryuk's tone. Tray → Mute microphone; hold push-to-talk → "Microphone is muted".
+5. Avatar menu → Sleep → avatar dims; hold push-to-talk → it wakes and listens.
+6. Mode → Free… with no PIN set → item disabled ("set a PIN in Settings first"). Set a PIN in Settings → try wrong and right PINs.
+7. Settings → Test each key, Run checks; close the window → avatar and backend keep running.
+8. Press `Ctrl+Alt+H` → avatar hides/shows. Tick "Start Kira with Windows", sign out and in → Kira starts.
+9. Drag the avatar, Quit, `npm start` again → same position and size, mode Restricted.
+10. Quit → Task Manager shows no `python.exe` from `.venv`.
 
 ---
 
@@ -355,27 +449,23 @@ To test all avatar animations and interactions in isolation without running LLMs
 
 Run the full automated test suite:
 
-### Python Backend Suite (**163 unit tests**, all offline/mocked):
+### Python Backend Suite (all offline/mocked)
 ```powershell
-.venv\Scripts\python.exe -m pytest -v
+.venv\Scripts\python.exe -m pytest -q
 ```
+Includes M1: `tests/test_app_controls.py` (persona, mute vs sleep, PTT wake,
+shutdown, WebSocket control commands, PIN lockout), `tests/test_settings.py`
+(.env editing, user settings, override whitelist, settings CLI),
+`tests/test_doctor.py`, `tests/test_no_secret_leaks.py`.
 
-* `tests/test_agent.py`: 14 passed (agent loop, max steps, retry limits)
-* `tests/test_events.py`: 6 passed (event pub/sub, ordering, secret stripping, restricted demo)
-* `tests/test_policy.py`: 48 passed, 1 skipped (permission modes, boundaries, kill switch, persona independence)
-* `tests/test_providers.py`: 16 passed (provider fallback chain, cooldowns)
-* `tests/test_tools.py`: 19 passed (filesystem, run_command, open_app, open_website, cmd pause)
-* `tests/test_voice.py`: 25 passed (STT, TTS, sentence pipelining, hotkeys, shared confirm)
-* `tests/test_vscode_visible.py`: 8 passed (window wait, save verify, active window guard, fail-safe)
-* `tests/test_server.py`: 17 passed (token auth, origin/host checks, confirm question_id, slow client drop, throttling)
-
-### Electron Avatar Suite (**22 unit tests**, node:test runner):
+### Electron Avatar Suite (node:test, no Electron or GPU needed)
 ```powershell
 cd avatar
 npm test
 ```
+`avatar/tests/avatar.test.js` (state machine, loudness, schema, bounds, bubble,
+hit-mask) and `avatar/tests/controls.test.js` (menus, user config, off-screen
+reset, sizes, action feed, backend start/stop and kill-tree, settings CLI
+runner, control command schema).
 
-* `avatar/tests/avatar.test.js`: 22 passed (state machine, loudness EMA, backend schema, bounds clamping, bubble sanitization, alpha hit-mask)
-
-Total: **185 tests passed (100% green)**.
-
+Current totals per milestone: see `docs/PROGRESS.md`.

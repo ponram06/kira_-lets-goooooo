@@ -45,8 +45,9 @@ _QUOTA_KEYWORDS = ("quota", "daily", "exceeded", "resource_exhausted", "billing"
 
 
 def _load_config(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    """config.yaml plus the user's model overrides (backend.config_loader)."""
+    from backend.config_loader import load_config
+    return load_config(path)
 
 
 class ProviderManager:

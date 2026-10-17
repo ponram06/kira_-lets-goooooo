@@ -8,7 +8,16 @@ const ALLOWED_COMMANDS = Object.freeze([
   'stop',
   'confirm',
   'restricted mode',
-  'mode'
+  'restricted_mode',
+  'mode',
+  // M1 app controls
+  'free_mode_request',
+  'set_persona',
+  'set_mic_muted',
+  'set_sleep',
+  'get_status',
+  'reload_settings',
+  'shutdown'
 ]);
 
 /**
@@ -17,6 +26,19 @@ const ALLOWED_COMMANDS = Object.freeze([
  */
 function createStopMessage() {
   return JSON.stringify({ command: 'stop' });
+}
+
+/**
+ * Builds a control command with a request id (the backend echoes it in its ack).
+ * @param {string} command
+ * @param {object} fields
+ * @param {string} requestId
+ * @returns {object}
+ */
+function createCommand(command, fields = {}, requestId = '') {
+  const msg = { ...fields, command };
+  if (requestId) msg.request_id = requestId;
+  return msg;
 }
 
 /**
@@ -48,6 +70,16 @@ function isValidCommand(message) {
     return false;
   }
 
+  if (lowerCmd === 'free_mode_request') {
+    // PIN: digits only, 4-12 (never logged; sent only over the authenticated socket)
+    if (typeof parsed.pin !== 'string' || !/^\d{4,12}$/.test(parsed.pin)) return false;
+  }
+  if (lowerCmd === 'set_persona' && (typeof parsed.persona !== 'string' || !parsed.persona.trim())) {
+    return false;
+  }
+  if (lowerCmd === 'set_mic_muted' && typeof parsed.muted !== 'boolean') return false;
+  if (lowerCmd === 'set_sleep' && typeof parsed.sleeping !== 'boolean') return false;
+
   if (lowerCmd === 'confirm') {
     if (typeof parsed.question_id !== 'string' || !parsed.question_id.trim()) {
       return false;
@@ -72,6 +104,7 @@ function isValidTokenString(token) {
 module.exports = {
   ALLOWED_COMMANDS,
   createStopMessage,
+  createCommand,
   isValidCommand,
   isValidTokenString
 };

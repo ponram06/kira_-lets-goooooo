@@ -46,6 +46,7 @@ import yaml
 from websockets.asyncio.server import ServerConnection, serve
 
 from backend import events as _events
+from backend import secrets_guard
 from backend.policy import KILL_SWITCH, ModeManager
 from backend.voice import register_confirmation_response
 
@@ -82,6 +83,7 @@ class WebSocketServer:
         config_path: Path = _DEFAULT_CONFIG,
         mode_manager: Optional[ModeManager] = None,
         voice_manager: Optional[Any] = None,
+        app_state: Optional[Any] = None,
     ) -> None:
         if config is None:
             config = self._load_config(config_path)
@@ -119,6 +121,7 @@ class WebSocketServer:
 
         self.mode_manager = mode_manager
         self.voice_manager = voice_manager
+        self.app_state = app_state
 
         self.token: str = ""
         self.running: bool = False
@@ -176,12 +179,17 @@ class WebSocketServer:
     def get_snapshot(self) -> dict:
         """Return the current system snapshot."""
         mode_val = self.mode_manager.mode.value if self.mode_manager else self._current_mode
-        return {
+        snap = {
             "type": "snapshot",
             "state": self._current_state,
             "mode": mode_val,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        if self.app_state is not None:
+            snap.update(self.app_state.status())
+        elif self.mode_manager is not None:
+            snap["free_mode_available"] = self.mode_manager.free_mode_available
+        return snap
 
     # -------------------------------------------------------------------------
     # Server Lifecycle
@@ -434,6 +442,43 @@ class WebSocketServer:
             lvl = max(0.0, min(1.0, round(float(raw_lvl), 3)))
             formatted = {"type": "loudness", "level": lvl, "value": lvl, "timestamp": ts}
 
+        elif event_type == "policy.decision":
+            decision = str(data.get("decision", ""))
+            # Only blocks and countdowns are interesting for the action feed
+            if decision in ("block", "countdown"):
+                formatted = {
+                    "type": "policy_decision",
+                    "decision": decision,
+                    "tool": str(data.get("tool", "")),
+                    "timestamp": ts,
+                }
+
+        elif event_type == "tool.error":
+            formatted = {"type": "tool_error", "summary": truncate_text(raw_text, 120), "timestamp": ts}
+
+        elif event_type == "kill_switch.activated":
+            formatted = {"type": "kill_switch", "timestamp": ts}
+
+        elif event_type == "free_mode.denied":
+            formatted = {
+                "type": "free_mode_denied",
+                "reason": str(data.get("reason", "")),
+                "lockout_seconds": int(data.get("lockout_seconds", 0) or 0),
+                "timestamp": ts,
+            }
+
+        elif event_type == "persona.change":
+            formatted = {"type": "persona_change", "persona": str(data.get("persona", "")), "timestamp": ts}
+
+        elif event_type == "mic.mute":
+            formatted = {"type": "mic_mute", "muted": bool(data.get("muted")), "timestamp": ts}
+
+        elif event_type == "sleep.change":
+            formatted = {"type": "sleep_change", "sleeping": bool(data.get("sleeping")), "timestamp": ts}
+
+        elif event_type == "app.shutdown":
+            formatted = {"type": "shutdown", "timestamp": ts}
+
         if formatted is not None:
             self._broadcast(formatted)
 
@@ -442,7 +487,7 @@ class WebSocketServer:
         if not self._clients:
             return
 
-        payload = json.dumps(message_dict, ensure_ascii=False)
+        payload = secrets_guard.redact(json.dumps(message_dict, ensure_ascii=False))
         for ws, queue in list(self._clients.items()):
             try:
                 queue.put_nowait(payload)
@@ -639,12 +684,84 @@ class WebSocketServer:
             )
 
         elif cmd_lower in ("free_mode", "free"):
-            # Free mode cannot be enabled via WebSocket
+            # Free mode needs the PIN dialog (free_mode_request); never a bare command
             await websocket.send(
                 json.dumps({
                     "type": "error",
                     "code": "free_mode_forbidden",
-                    "message": "Free mode cannot be enabled via WebSocket. Please type 'free mode' in terminal.",
+                    "message": "Free mode needs the PIN dialog in the avatar menu.",
                 })
             )
+
+        elif cmd_lower in self._COMMANDS:
+            await self._handle_control_command(websocket, cmd_lower, data)
         # Any other unknown command is safely ignored
+
+    # -------------------------------------------------------------------------
+    # Control commands from the tray / avatar menu / settings window (M1)
+    # -------------------------------------------------------------------------
+
+    _COMMANDS = frozenset({
+        "free_mode_request", "set_persona", "set_mic_muted", "set_sleep",
+        "get_status", "reload_settings", "shutdown",
+    })
+
+    async def _handle_control_command(self, websocket: ServerConnection, cmd: str, data: dict) -> None:
+        """
+        Handle a control command and reply with a command_ack carrying the
+        client's request_id. Payload values (especially the PIN) are never
+        logged or echoed back.
+        """
+        ack: dict[str, Any] = {"type": "command_ack", "command": cmd, "status": "executed"}
+        rid = data.get("request_id")
+        if isinstance(rid, (str, int)) and len(str(rid)) <= 64:
+            ack["request_id"] = rid
+        st = self.app_state
+
+        if cmd == "free_mode_request":
+            pin = data.get("pin")
+            if not self.mode_manager or not isinstance(pin, str) or len(pin) > 64:
+                ack["status"] = "invalid"
+            else:
+                result = await asyncio.to_thread(self.mode_manager.try_enter_free, pin)
+                ack["status"] = result
+                if result == "locked":
+                    ack["lockout_seconds"] = round(self.mode_manager.lockout_remaining())
+                if result == "ok":
+                    ack["free_timeout"] = int(self.mode_manager.free_timeout)
+            pin = None
+
+        elif cmd == "set_persona":
+            ok = bool(st and st.set_persona(str(data.get("persona", ""))))
+            ack["status"] = "executed" if ok else "invalid"
+
+        elif cmd == "set_mic_muted":
+            if st is None or not isinstance(data.get("muted"), bool):
+                ack["status"] = "invalid"
+            else:
+                st.set_mic_muted(data["muted"])
+
+        elif cmd == "set_sleep":
+            if st is None or not isinstance(data.get("sleeping"), bool):
+                ack["status"] = "invalid"
+            else:
+                st.set_sleeping(data["sleeping"])
+
+        elif cmd == "reload_settings":
+            if st is None:
+                ack["status"] = "invalid"
+            else:
+                st.reload_settings()
+
+        elif cmd == "get_status":
+            ack["snapshot"] = self.get_snapshot()
+
+        elif cmd == "shutdown":
+            if st is None:
+                ack["status"] = "invalid"
+            else:
+                await websocket.send(json.dumps(ack))
+                st.request_shutdown()
+                return
+
+        await websocket.send(json.dumps(ack))

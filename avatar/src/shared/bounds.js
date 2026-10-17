@@ -85,8 +85,46 @@ function findDisplayForWindow(x, y, width, height, displays) {
   return closest;
 }
 
+/**
+ * True if at least a usable part of the window (minVisible px in each
+ * direction) overlaps some display's work area.
+ */
+function isOnAnyDisplay(x, y, width, height, displays, minVisible = 40) {
+  if (!Array.isArray(displays)) return false;
+  return displays.some((d) => {
+    const wa = d.workArea || d.bounds;
+    if (!wa) return false;
+    const overlapX = Math.min(x + width, wa.x + wa.width) - Math.max(x, wa.x);
+    const overlapY = Math.min(y + height, wa.y + wa.height) - Math.max(y, wa.y);
+    return overlapX >= Math.min(minVisible, width) && overlapY >= Math.min(minVisible, height);
+  });
+}
+
+/**
+ * Start position on launch: the saved position if it is still on a
+ * connected screen (clamped inside it), otherwise the default bottom-right
+ * spot on the primary display (e.g. after a monitor was unplugged).
+ * @param {{x:number,y:number}|null} saved
+ */
+function resolveStartPosition(saved, width, height, displays, primaryWorkArea, margins = {}) {
+  const fallback = calculateDefaultPosition(
+    primaryWorkArea, width, height, margins.right ?? 20, margins.bottom ?? 20
+  );
+  if (!saved || typeof saved.x !== 'number' || typeof saved.y !== 'number' ||
+      !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) {
+    return fallback;
+  }
+  if (!isOnAnyDisplay(saved.x, saved.y, width, height, displays)) {
+    return fallback;
+  }
+  const disp = findDisplayForWindow(saved.x, saved.y, width, height, displays);
+  return clampToBounds(saved.x, saved.y, width, height, disp ? (disp.workArea || disp.bounds) : primaryWorkArea);
+}
+
 module.exports = {
   clampToBounds,
   calculateDefaultPosition,
-  findDisplayForWindow
+  findDisplayForWindow,
+  isOnAnyDisplay,
+  resolveStartPosition
 };

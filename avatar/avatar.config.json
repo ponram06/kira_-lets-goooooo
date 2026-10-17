@@ -39,6 +39,10 @@
     "token_file": "../.kira/token",
     "reconnect_min_ms": 1000,
     "reconnect_max_ms": 10000
+  },
+  "backend": {
+    "autostart": true,
+    "python": null,
+    "shutdown_timeout_ms": 5000
   }
 }
-

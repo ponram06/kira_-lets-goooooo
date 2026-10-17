@@ -85,6 +85,11 @@ class SpriteRenderer {
     this.mode = m === 'free' ? 'free' : 'restricted';
   }
 
+  /** Sleep: render at 5 FPS instead of 30 to save CPU (the CSS dims the avatar). */
+  setSleeping(sleeping) {
+    this.fpsInterval = 1000 / (sleeping ? 5 : 30);
+  }
+
   setLoudness(val) {
     this.rawLoudness = Math.min(1.0, Math.max(0.0, Number(val) || 0.0));
   }
@@ -93,6 +98,7 @@ class SpriteRenderer {
     const loop = (timestamp) => {
       requestAnimationFrame(loop);
 
+      if (document.hidden) return;   // window hidden: skip drawing
       const elapsed = timestamp - this.lastFrameTime;
       if (elapsed < this.fpsInterval) return;
 

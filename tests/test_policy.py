@@ -34,6 +34,7 @@ from pathlib import Path
 import pytest
 
 import backend.policy as policy_module
+from tests.conftest import TEST_PIN
 from backend.policy import (
     KILL_SWITCH,
     TOOL_REGISTRY,
@@ -411,21 +412,21 @@ def test_mode_manager_default_is_restricted():
     assert mm.mode == Mode.RESTRICTED
 
 
-def test_mode_manager_enter_free_confirmed():
-    mm = ModeManager(confirm_callback=lambda: True)
-    assert mm.enter_free() is True
+def test_mode_manager_enter_free_with_pin():
+    mm = ModeManager(pin=TEST_PIN)
+    assert mm.enter_free(pin=TEST_PIN) is True
     assert mm.mode == Mode.FREE
 
 
-def test_mode_manager_enter_free_denied():
-    mm = ModeManager(confirm_callback=lambda: False)
+def test_mode_manager_enter_free_without_pin_denied():
+    mm = ModeManager(pin=TEST_PIN)
     assert mm.enter_free() is False
     assert mm.mode == Mode.RESTRICTED
 
 
 def test_mode_manager_enter_restricted_immediate():
-    mm = ModeManager(confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     mm.enter_restricted()
     assert mm.mode == Mode.RESTRICTED
 
@@ -436,35 +437,58 @@ def test_mode_manager_screen_control_enabled_by_default():
 
 
 # ---------------------------------------------------------------------------
-# ModeManager — injectable confirm callback
-# ---------------------------------------------------------------------------
 
 
-def test_mode_manager_injectable_callback():
-    """The UI can inject its own confirm callback."""
-    calls: list[bool] = []
+def test_free_mode_disabled_without_pin():
+    """No KIRA_FREE_MODE_PIN configured → Free mode is disabled entirely."""
+    mm = ModeManager()
+    assert mm.free_mode_available is False
+    assert mm.try_enter_free("anything") == ModeManager.DISABLED
+    assert mm.try_enter_free("") == ModeManager.DISABLED
+    assert mm.mode == Mode.RESTRICTED
 
-    def my_confirm() -> bool:
-        calls.append(True)
-        return True
 
-    mm = ModeManager(confirm_callback=my_confirm)
-    mm.enter_free()
-    assert len(calls) == 1
+def test_pin_loader_read_fresh_each_attempt():
+    """A PIN changed in Settings applies without restarting the backend."""
+    current = {"pin": ""}
+    mm = ModeManager(pin_loader=lambda: current["pin"])
+    assert mm.try_enter_free(TEST_PIN) == ModeManager.DISABLED
+    current["pin"] = TEST_PIN
+    assert mm.free_mode_available is True
+    assert mm.try_enter_free(TEST_PIN) == ModeManager.OK
+
+
+def test_wrong_pin_lockout_after_three_attempts():
+    now = [1000.0]
+    mm = ModeManager(pin=TEST_PIN, max_attempts=3, lockout_seconds=60, clock=lambda: now[0])
+    assert mm.try_enter_free("1111") == ModeManager.WRONG_PIN
+    assert mm.try_enter_free("2222") == ModeManager.WRONG_PIN
+    assert mm.try_enter_free("3333") == ModeManager.LOCKED
+    # Even the right PIN is refused during the lockout
+    assert mm.try_enter_free(TEST_PIN) == ModeManager.LOCKED
+    assert mm.lockout_remaining() == 60
+    now[0] += 61
+    assert mm.try_enter_free(TEST_PIN) == ModeManager.OK
     assert mm.mode == Mode.FREE
 
 
-def test_mode_manager_injectable_callback_deny():
-    denied: list = []
+def test_successful_pin_resets_failure_count():
+    mm = ModeManager(pin=TEST_PIN, max_attempts=3)
+    mm.try_enter_free("1111")
+    mm.try_enter_free("2222")
+    assert mm.try_enter_free(TEST_PIN) == ModeManager.OK
+    mm.enter_restricted()
+    assert mm.try_enter_free("1111") == ModeManager.WRONG_PIN   # counter restarted
 
-    def deny() -> bool:
-        denied.append(True)
-        return False
 
-    mm = ModeManager(confirm_callback=deny)
-    mm.enter_free()
-    assert len(denied) == 1
-    assert mm.mode == Mode.RESTRICTED
+def test_pin_never_logged_or_in_repr(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+    mm = ModeManager(pin=TEST_PIN)
+    mm.try_enter_free("98765")
+    mm.try_enter_free(TEST_PIN)
+    assert "98765" not in caplog.text and TEST_PIN not in caplog.text
+    assert TEST_PIN not in repr(mm)
 
 
 # ---------------------------------------------------------------------------
@@ -474,8 +498,8 @@ def test_mode_manager_injectable_callback_deny():
 
 def test_mode_manager_auto_revert_after_timeout():
     """Free mode must revert to Restricted after free_timeout seconds."""
-    mm = ModeManager(free_timeout=1, confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(free_timeout=1, pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     assert mm.mode == Mode.FREE
     time.sleep(1.3)   # wait for timer to fire
     assert mm.mode == Mode.RESTRICTED
@@ -483,8 +507,8 @@ def test_mode_manager_auto_revert_after_timeout():
 
 def test_mode_manager_enter_restricted_cancels_timer():
     """Calling enter_restricted() before the timer fires should keep it Restricted."""
-    mm = ModeManager(free_timeout=5, confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(free_timeout=5, pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     mm.enter_restricted()
     assert mm.mode == Mode.RESTRICTED
     time.sleep(0.1)
@@ -498,8 +522,8 @@ def test_mode_manager_enter_restricted_cancels_timer():
 
 
 def test_ollama_forces_restricted_from_free():
-    mm = ModeManager(confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     assert mm.mode == Mode.FREE
 
     mm.notify_provider("ollama")
@@ -509,8 +533,8 @@ def test_ollama_forces_restricted_from_free():
 
 
 def test_ollama_forces_restricted_case_insensitive():
-    mm = ModeManager(confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     mm.notify_provider("Ollama")   # capitalised
     assert mm.mode == Mode.RESTRICTED
 
@@ -526,25 +550,25 @@ def test_enter_free_re_enables_screen_control_after_ollama():
     After Ollama disables screen control, a deliberate enter_free() must
     re-enable it (user consciously chose to go back to Free mode).
     """
-    mm = ModeManager(confirm_callback=lambda: True)
+    mm = ModeManager(pin=TEST_PIN)
     mm.notify_provider("ollama")
     assert mm.screen_control_enabled is False
 
-    mm.enter_free()   # deliberate user action
+    mm.enter_free(pin=TEST_PIN)   # deliberate user action
     assert mm.mode == Mode.FREE
     assert mm.screen_control_enabled is True
 
 
 def test_non_ollama_provider_does_not_change_mode():
-    mm = ModeManager(confirm_callback=lambda: True)
-    mm.enter_free()
+    mm = ModeManager(pin=TEST_PIN)
+    mm.enter_free(pin=TEST_PIN)
     mm.notify_provider("gemini")
     assert mm.mode == Mode.FREE
 
 
 def test_ollama_forced_restricted_persists_across_calls():
     """Ollama Restricted must stick even when notify_provider is called again."""
-    mm = ModeManager(confirm_callback=lambda: True)
+    mm = ModeManager(pin=TEST_PIN)
     mm.notify_provider("ollama")
     mm.notify_provider("gemini")   # non-Ollama does not lift the restriction
     assert mm.mode == Mode.RESTRICTED
@@ -572,22 +596,9 @@ def test_persona_confirmation_wording_fixed_and_independent():
     assert "kira" in personas, "kira persona must be defined in config.yaml"
     assert "ryuk" in personas, "ryuk persona must be defined in config.yaml"
 
-    # 1. Mode switch confirmation prompt is fixed regardless of persona
-    expected_mode_confirm = (
-        "Enable Free mode? Fewer confirmations will be asked. "
-        "Type 'yes' to confirm: "
-    )
-    assert ModeManager._terminal_confirm.__doc__ is not None
-    # Test enter_free prompt format via mock callback verifying fixed text
-    received_prompts = []
-
-    def mock_cb():
-        received_prompts.append("enter_free_prompt")
-        return False
-
-    mm = ModeManager(confirm_callback=mock_cb)
-    mm.enter_free()
-    assert len(received_prompts) == 1
+    # 1. Free mode needs the PIN regardless of persona
+    mm = ModeManager(pin=TEST_PIN)
+    assert mm.enter_free() is False
     assert mm.mode == Mode.RESTRICTED  # Refused, remains restricted
 
     # 2. Risky tool confirmation format is fixed: "Action '{fn_name}' requires confirmation (Mode: {mode}). Arguments: {args}. Do you want to proceed? [y/N]: "
@@ -606,35 +617,23 @@ def test_persona_confirmation_wording_fixed_and_independent():
 
 
 # ---------------------------------------------------------------------------
-# ModeManager PIN Tests
+# ModeManager PIN Tests (TEST_PIN is an obvious fake constant)
 # ---------------------------------------------------------------------------
 
 
 def test_mode_manager_enter_free_with_correct_pin():
-    mm = ModeManager(pin="1684")
-    assert mm.enter_free(pin="1684") is True
+    mm = ModeManager(pin=TEST_PIN)
+    assert mm.enter_free(pin=TEST_PIN) is True
     assert mm.mode == Mode.FREE
 
 
 def test_mode_manager_enter_free_with_wrong_pin():
-    mm = ModeManager(pin="1684")
+    mm = ModeManager(pin=TEST_PIN)
     assert mm.enter_free(pin="9999") is False
     assert mm.mode == Mode.RESTRICTED
 
 
 def test_mode_manager_enter_free_pin_strips_whitespace():
-    mm = ModeManager(pin="1684")
-    assert mm.enter_free(pin=" 1684 \n") is True
+    mm = ModeManager(pin=TEST_PIN)
+    assert mm.enter_free(pin=f" {TEST_PIN} \n") is True
     assert mm.mode == Mode.FREE
-
-
-def test_extract_pin_digits_variations():
-    from backend.brain import extract_pin_digits
-
-    assert extract_pin_digits("1684") == "1684"
-    assert extract_pin_digits("PIN: 1684") == "1684"
-    assert extract_pin_digits("1 6 8 4") == "1684"
-    assert extract_pin_digits("one six eight four") == "1684"
-    assert extract_pin_digits("sixteen eighty-four") == "1684"
-    assert extract_pin_digits("") == ""
-

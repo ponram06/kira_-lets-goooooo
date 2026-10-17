@@ -49,5 +49,20 @@ contextBridge.exposeInMainWorld('kiraAvatar', {
 
   sendStop: () => {
     ipcRenderer.send('avatar:stop');
+  },
+
+  // Opens the native avatar menu (hover control button or right-click)
+  openMenu: () => {
+    ipcRenderer.send('avatar:open-menu');
+  },
+
+  // UI state from main: { scale, feedVisible, locked, sleeping, micMuted, connected }
+  onUi: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const subscription = (_event, data) => callback(data);
+    ipcRenderer.on('avatar:ui', subscription);
+    return () => {
+      ipcRenderer.removeListener('avatar:ui', subscription);
+    };
   }
 });

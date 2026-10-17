@@ -43,7 +43,7 @@
   let isDragging = false;
   let lastScreenX = 0;
   let lastScreenY = 0;
-  let isLocked = false;
+  let isLocked = Boolean(configData.ui?.locked);
 
   // Prevent all browser zooming (Ctrl+wheel, touch pinch, dblclick, Ctrl+/- shortcuts)
   window.addEventListener('wheel', (e) => {
@@ -94,55 +94,104 @@
   dragHandle.addEventListener('pointerup', stopDrag);
   dragHandle.addEventListener('pointercancel', stopDrag);
 
-  // 5. Setup Click-Through (setIgnoreMouseEvents)
-  // When mouse enters interactive elements, disable ignoreMouseEvents
-  const interactiveElements = [
-    dragHandle,
-    bubbleElem,
-    document.getElementById('hover-menu-container')
-  ];
+  // 5. Control button + click-through
+  // Only the character (drag handle), the control button and the bubble take
+  // the mouse; everything else in the window passes clicks through.
+  const container = document.getElementById('container');
+  const controlBtn = document.getElementById('control-btn');
+  const feedElem = document.getElementById('action-feed');
+  const badgesElem = document.getElementById('status-badges');
+  const interactiveElements = [dragHandle, bubbleElem, controlBtn];
+  const HIDE_BUTTON_MS = 2000;
+  let hideBtnTimer = null;
+
+  const showControlButton = () => {
+    clearTimeout(hideBtnTimer);
+    controlBtn.classList.add('visible');
+  };
+  const scheduleHideButton = () => {
+    clearTimeout(hideBtnTimer);
+    hideBtnTimer = setTimeout(() => controlBtn.classList.remove('visible'), HIDE_BUTTON_MS);
+  };
 
   for (const elem of interactiveElements) {
     if (!elem) continue;
     elem.addEventListener('pointerenter', () => {
       window.kiraAvatar.setIgnoreMouseEvents(false);
+      if (elem !== bubbleElem) showControlButton();
     });
     elem.addEventListener('pointerleave', (e) => {
       if (!isDragging && !interactiveElements.some(el => el.contains(e.relatedTarget))) {
         window.kiraAvatar.setIgnoreMouseEvents(true, true);
+        scheduleHideButton();
       }
     });
   }
 
-  // 6. Hover Menu Controls
-  const btnStop = document.getElementById('btn-stop');
-  if (btnStop) {
-    btnStop.addEventListener('click', () => {
-      window.kiraAvatar.sendStop();
-    });
-  }
+  // 6. Menus: control button click or right-click on the character
+  controlBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.kiraAvatar.openMenu();
+  });
+  dragHandle.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    window.kiraAvatar.openMenu();
+  });
 
-  const btnLock = document.getElementById('btn-lock');
-  if (btnLock) {
-    btnLock.addEventListener('click', () => {
-      isLocked = !isLocked;
-      btnLock.textContent = isLocked ? 'Unlock Position' : 'Lock Position';
-      dragHandle.style.cursor = isLocked ? 'default' : 'grab';
-    });
-  }
+  // UI state from main: size, feed, lock, sleep, mic, connection
+  let feed = [];
+  const renderFeed = () => {
+    feedElem.replaceChildren(...feed.map((entry) => {
+      const li = document.createElement('li');
+      li.className = entry.kind;
+      li.textContent = entry.text;      // textContent only: never HTML
+      return li;
+    }));
+  };
 
-  const btnSleep = document.getElementById('btn-sleep');
-  if (btnSleep) {
-    btnSleep.addEventListener('click', () => {
-      bubble.hide();
-      renderer.setState('offline');
-    });
-  }
+  const renderBadges = (ui) => {
+    const badges = [];
+    if (ui.connected === false) badges.push(['offline', 'warn']);
+    if (ui.micMuted) badges.push(['mic off', 'warn']);
+    if (ui.sleeping) badges.push(['zZ', '']);
+    badgesElem.replaceChildren(...badges.map(([text, cls]) => {
+      const span = document.createElement('span');
+      span.className = `badge ${cls}`.trim();
+      span.textContent = text;
+      return span;
+    }));
+  };
+
+  const applyUi = (ui) => {
+    if (!ui || typeof ui !== 'object') return;
+    if (typeof ui.scale === 'number' && ui.scale > 0) {
+      container.style.transform = `scale(${ui.scale})`;
+    }
+    if (typeof ui.feedVisible === 'boolean') feedElem.classList.toggle('hidden', !ui.feedVisible);
+    if (typeof ui.locked === 'boolean') {
+      isLocked = ui.locked;
+      dragHandle.classList.toggle('locked', isLocked);
+    }
+    if (typeof ui.sleeping === 'boolean') {
+      container.classList.toggle('sleeping', ui.sleeping);
+      renderer.setSleeping(ui.sleeping);
+      if (ui.sleeping) bubble.hide();
+    }
+    renderBadges(ui);
+  };
+  applyUi(configData.ui);
+  window.kiraAvatar.onUi(applyUi);
 
   // 7. Subscribe to WebSocket events forwarded from main process
   window.kiraAvatar.onEvent((eventData) => {
     if (!eventData || typeof eventData !== 'object') return;
     const { type, payload } = eventData;
+
+    const entry = window.KiraFeed.formatFeedEntry(type, payload);
+    if (entry) {
+      feed = window.KiraFeed.pushFeed(feed, entry);
+      renderFeed();
+    }
 
     switch (type) {
       case 'snapshot':

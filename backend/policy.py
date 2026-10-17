@@ -14,8 +14,8 @@ Key concepts
     ``"countdown"`` start a 3-second cancellable timer, then run
     ``"block"``     refuse; explain to the user
 
-- **ModeManager** — Restricted (default) / Free; injectable confirm callback;
-  auto-revert timer; forces Restricted + disables screen control when the
+- **ModeManager** — Restricted (default) / Free; PIN-gated Free mode with a
+  wrong-PIN lockout; auto-revert timer; forces Restricted + disables screen control when the
   answering LLM provider is Ollama.
 
 - **resolve_path(p)** — resolves *p* and raises ``PolicyError`` if it escapes
@@ -34,6 +34,7 @@ add ``win32api.GetLongPathName()`` (requires *pywin32*).
 from __future__ import annotations
 
 import enum
+import hmac
 import logging
 import os
 import threading
@@ -256,41 +257,66 @@ class ModeManager:
 
     Rules
     -----
-    - Starts in Restricted mode.
-    - ``enter_free()`` calls the injectable *confirm_callback*; if it returns
-      ``True``, switches to Free and starts the auto-revert timer.
+    - Starts in Restricted mode (the mode is never persisted).
+    - ``enter_free(pin)`` needs a configured PIN (``KIRA_FREE_MODE_PIN`` in
+      .env) and a matching *pin*. The UI's confirmation dialog is the
+      deliberate confirmation; the PIN is the gate. No PIN configured →
+      Free mode is disabled.
+    - After *max_attempts* wrong PINs, every attempt is refused for
+      *lockout_seconds*.
+    - The PIN (right or wrong) is NEVER logged, printed or put in events.
     - ``enter_restricted()`` switches immediately (e.g. user says "restricted
       mode").
     - ``notify_provider(name)`` must be called after every LLM reply.  When
       *name* is ``"ollama"``, the mode is forced to Restricted and screen
       control is disabled.  This persists until the user deliberately calls
       ``enter_free()`` again.
-    - The *confirm_callback* is injectable so a UI can plug in later.
 
     Parameters
     ----------
     free_timeout:
         Seconds before Free mode auto-reverts to Restricted.
-    confirm_callback:
-        Callable[[], bool] that returns True if the user approves Free mode.
-        Defaults to a terminal prompt.
+    pin:
+        Fixed PIN (tests). Ignored when *pin_loader* is given.
+    pin_loader:
+        Callable returning the current PIN (read fresh on every attempt so a
+        PIN changed in Settings applies without a restart).
+    max_attempts, lockout_seconds:
+        Wrong-PIN lockout policy.
+    clock:
+        Injectable monotonic clock (tests).
     """
+
+    # Results of try_enter_free()
+    OK = "ok"
+    DISABLED = "disabled"
+    WRONG_PIN = "wrong_pin"
+    LOCKED = "locked"
 
     def __init__(
         self,
         free_timeout: int = 600,
-        confirm_callback: Optional[Callable[[], bool]] = None,
-        pin: str = "1684",
+        pin: Optional[str] = None,
+        pin_loader: Optional[Callable[[], Optional[str]]] = None,
+        max_attempts: int = 3,
+        lockout_seconds: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._mode: Mode = Mode.RESTRICTED
         self._free_timeout: int = free_timeout
-        self._confirm_callback: Callable[[], bool] = (
-            confirm_callback or self._terminal_confirm
-        )
-        self.pin: str = str(pin).strip()
+        self._fixed_pin: str = str(pin).strip() if pin else ""
+        self._pin_loader = pin_loader
+        self._max_attempts = max(1, int(max_attempts))
+        self._lockout_seconds = float(lockout_seconds)
+        self._clock = clock
+        self._failed_attempts = 0
+        self._locked_until = 0.0
         self._revert_timer: Optional[threading.Timer] = None
         self._lock = threading.Lock()
         self._screen_control_disabled: bool = False
+
+    def __repr__(self) -> str:   # never expose the PIN in reprs / tracebacks
+        return f"ModeManager(mode={self._mode.value})"
 
     # ── properties ──────────────────────────────────────────────────────────
 
@@ -305,23 +331,61 @@ class ModeManager:
 
     # ── public methods ───────────────────────────────────────────────────────
 
-    def enter_free(self, pin: Optional[str] = None) -> bool:
-        """
-        Attempt to switch to Free mode.
-        If *pin* is provided, checks against self.pin. Otherwise invokes confirm callback.
+    @property
+    def free_timeout(self) -> int:
+        return self._free_timeout
 
-        Returns ``True`` if Free mode was entered, ``False`` if denied.
+    @free_timeout.setter
+    def free_timeout(self, seconds: int) -> None:
+        self._free_timeout = max(60, int(seconds))
+
+    def _current_pin(self) -> str:
+        if self._pin_loader is not None:
+            try:
+                return str(self._pin_loader() or "").strip()
+            except Exception:
+                return ""
+        return self._fixed_pin
+
+    @property
+    def free_mode_available(self) -> bool:
+        """False when no PIN is configured (Free mode disabled)."""
+        return bool(self._current_pin())
+
+    def lockout_remaining(self) -> float:
+        """Seconds left in the wrong-PIN lockout (0 when not locked)."""
+        return max(0.0, self._locked_until - self._clock())
+
+    def try_enter_free(self, pin: Optional[str]) -> str:
+        """
+        Attempt Free mode with *pin*. Returns one of OK, DISABLED, WRONG_PIN,
+        LOCKED. Never logs or returns the PIN.
         """
         with self._lock:
-            if pin is not None:
-                if str(pin).strip() != self.pin:
-                    logger.info("Free mode: incorrect PIN '%s'", pin)
-                    return False
-            else:
-                if not self._confirm_callback():
-                    logger.info("Free mode: user declined confirmation.")
-                    return False
+            expected = self._current_pin()
+            if not expected:
+                logger.info("Free mode refused: no PIN configured.")
+                self._publish_free_denied(self.DISABLED)
+                return self.DISABLED
+            if self.lockout_remaining() > 0:
+                logger.info("Free mode refused: PIN entry locked out.")
+                self._publish_free_denied(self.LOCKED)
+                return self.LOCKED
 
+            given = str(pin).strip() if pin is not None else ""
+            if not given or not hmac.compare_digest(given.encode(), expected.encode()):
+                self._failed_attempts += 1
+                if self._failed_attempts >= self._max_attempts:
+                    self._failed_attempts = 0
+                    self._locked_until = self._clock() + self._lockout_seconds
+                    logger.info("Free mode refused: wrong PIN, locked for %d s.", self._lockout_seconds)
+                    self._publish_free_denied(self.LOCKED)
+                    return self.LOCKED
+                logger.info("Free mode refused: wrong PIN.")
+                self._publish_free_denied(self.WRONG_PIN)
+                return self.WRONG_PIN
+
+            self._failed_attempts = 0
             self._mode = Mode.FREE
             self._screen_control_disabled = False   # re-enable on deliberate entry
             self._restart_revert_timer()
@@ -329,7 +393,11 @@ class ModeManager:
                 "Entered Free mode — auto-revert in %d s.", self._free_timeout
             )
             self._publish_mode_change(Mode.FREE, "user_confirmed")
-            return True
+            return self.OK
+
+    def enter_free(self, pin: Optional[str] = None) -> bool:
+        """Boolean wrapper around try_enter_free(): True if Free mode was entered."""
+        return self.try_enter_free(pin) == self.OK
 
     def enter_restricted(self) -> None:
         """Force Restricted mode immediately (e.g. user says 'restricted mode')."""
@@ -376,17 +444,17 @@ class ModeManager:
         except Exception as exc:
             logger.debug("Failed to publish mode.change event: %s", exc)
 
-    @staticmethod
-    def _terminal_confirm() -> bool:
-        """Default confirm: ask for 'yes' in the terminal."""
+    def _publish_free_denied(self, reason: str) -> None:
+        """Emit a free_mode.denied event (reason only — never the PIN)."""
         try:
-            answer = input(
-                "Enable Free mode? Fewer confirmations will be asked. "
-                "Type 'yes' to confirm: "
+            from backend import events as _events
+            _events.publish(
+                "free_mode.denied",
+                f"Free mode refused ({reason.replace('_', ' ')})",
+                {"reason": reason, "lockout_seconds": round(self.lockout_remaining())},
             )
-            return answer.strip().lower() == "yes"
-        except (EOFError, KeyboardInterrupt):
-            return False
+        except Exception as exc:
+            logger.debug("Failed to publish free_mode.denied event: %s", exc)
 
     def _restart_revert_timer(self) -> None:
         self._cancel_timer()

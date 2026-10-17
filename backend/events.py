@@ -29,11 +29,19 @@ Event types published by Kira
   voice.processing    PTT released — STT is running
   voice.speaking      TTS playback starting
   voice.done          TTS playback complete or interrupted
+  tool.error          A tool failed
+  free_mode.denied    Free-mode request refused (reason only, never the PIN)
+  persona.change      Persona switched live
+  mic.mute            Microphone muted / unmuted
+  sleep.change        Avatar sleep / wake
+  app.shutdown        Backend shutdown requested
 
 Rules
 -----
 - Never include secrets: any key whose name contains "key", "token", "secret",
-  "password", "api_key" or "apikey" is stripped from *data* before delivery.
+  "password", "pin", "api_key" or "apikey" is stripped from *data* before
+  delivery, and every known secret value (API keys, the Free-mode PIN) is
+  replaced with [REDACTED] in *text* and *data* (backend.secrets_guard).
 - JSONL lines are appended to logs/events.jsonl (which is in .gitignore).
 - This module coexists with audit.py; neither replaces the other.
 """
@@ -47,6 +55,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from backend import secrets_guard
+
 logger = logging.getLogger(__name__)
 
 LOGS_DIR = Path(__file__).parent.parent / "logs"
@@ -58,6 +68,8 @@ _subscribers: list[Callable[[dict[str, Any]], None]] = []
 
 # Field name fragments that identify secrets (case-insensitive match)
 _SECRET_FRAGMENTS = frozenset({"key", "token", "secret", "password", "api_key", "apikey"})
+# Exact field names that are secret but too short to match as fragments
+_SECRET_NAMES = frozenset({"pin", "free_mode_pin"})
 
 
 def _strip_secrets(data: dict[str, Any] | None) -> dict[str, Any]:
@@ -68,6 +80,7 @@ def _strip_secrets(data: dict[str, Any] | None) -> dict[str, Any]:
         k: v
         for k, v in data.items()
         if not any(frag in k.lower() for frag in _SECRET_FRAGMENTS)
+        and k.lower() not in _SECRET_NAMES
     }
 
 
@@ -115,12 +128,12 @@ def publish(
     -------
     The event dict that was published (useful for testing).
     """
-    safe_data = _strip_secrets(data)
+    safe_data = secrets_guard.redact_obj(_strip_secrets(data))
 
     event: dict[str, Any] = {
         "type": event_type,
         "ts": datetime.now(timezone.utc).isoformat(),
-        "text": text[:120],
+        "text": secrets_guard.redact(str(text))[:120],
         "data": safe_data,
     }
 

@@ -316,8 +316,8 @@ async def test_spoken_free_mode_refused(voice_config):
 
 @pytest.mark.asyncio
 async def test_spoken_restricted_mode_accepted(voice_config):
-    mode_mgr = ModeManager(confirm_callback=lambda: True)
-    mode_mgr.enter_free()
+    mode_mgr = ModeManager(pin="0000")  # obvious fake test PIN
+    mode_mgr.enter_free(pin="0000")
     assert mode_mgr.mode == Mode.FREE
 
     vm = VoiceManager(voice_config, mode_manager=mode_mgr)

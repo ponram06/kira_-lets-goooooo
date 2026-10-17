@@ -3,6 +3,8 @@
 # API keys belong in .env, never here.
 # =============================================================================
 
+# Settings builds its key/model fields from this list. key_test_path
+# (default "/models") is what the Test button requests with the key.
 providers:
   - name: groq
     base_url: "https://api.groq.com/openai/v1"
@@ -13,6 +15,8 @@ providers:
     base_url: "https://openrouter.ai/api/v1"
     api_key_env: OPENROUTER_API_KEY
     model: "poolside/laguna-s-2.1:free"
+    # /models is public on OpenRouter, so the Settings "Test" button uses /key
+    key_test_path: "/key"
 
   - name: ollama
     base_url: "http://localhost:11434/v1"
@@ -75,8 +79,11 @@ persona:
 mode:
   # Seconds before Free mode auto-reverts to Restricted (default 10 minutes)
   free_revert_timeout: 600
-  # PIN required to unlock Free mode
-  free_mode_pin: "1684"
+  # The Free-mode PIN is a secret: set KIRA_FREE_MODE_PIN in .env (or in
+  # Settings). Without it, Free mode stays disabled.
+  # Wrong-PIN lockout: after this many wrong attempts, refuse for N seconds
+  pin_max_attempts: 3
+  pin_lockout_seconds: 60
 
 # =============================================================================
 # Tool allow-lists
@@ -116,6 +123,8 @@ voice:
   hotkey: "`"
   # Global emergency kill hotkey (halts all speech, agent loops and tools instantly)
   kill_hotkey: "ctrl+alt+k"
+  # Microphone: null = system default, or a device name / index (see Settings)
+  input_device: null
 
   # Speech-to-Text (STT)
   stt:
@@ -174,3 +183,14 @@ server:
     - "file://"
     - "vscode-webview://"
     - "electron://"
+
+# =============================================================================
+# Doctor (python -m backend.doctor)
+# =============================================================================
+doctor:
+  # HTTPS address used for the internet check (HEAD request, no data sent)
+  internet_check_url: "https://www.google.com/generate_204"
+  # Seconds before each network check gives up
+  timeout: 4
+  # Command that must be on PATH for the VS Code tools
+  code_command: "code"

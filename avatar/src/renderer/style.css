@@ -106,93 +106,106 @@ html, body {
   word-break: break-word;
 }
 
-/* Hover Menu */
-#hover-menu-container {
+/* Whole avatar scales with the Size setting (transform set from app.js) */
+#container {
+  width: 380px;
+  height: 310px;
+  transform-origin: 0 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Sleep: dimmed; push-to-talk still works and wakes it */
+#container.sleeping {
+  opacity: 0.35;
+}
+
+#drag-handle.locked {
+  cursor: default;
+}
+
+/* Control button near the character's top-right; fades in on hover */
+#control-btn {
   position: absolute;
-  top: 14px;
-  right: 20px;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-#hover-trigger {
-  width: 28px;
-  height: 28px;
+  top: 62px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s, color 0.2s;
-  pointer-events: auto;
-}
-
-#hover-trigger:hover {
-  background: rgba(51, 65, 85, 0.95);
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(239, 68, 68, 0.7);
   color: #f8fafc;
-  border-color: rgba(239, 68, 68, 0.7);
-}
-
-#menu-items {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: rgba(15, 23, 42, 0.94);
-  border: 1px solid rgba(71, 85, 105, 0.6);
-  border-radius: 6px;
-  padding: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 30;
   opacity: 0;
-  visibility: hidden;
-  transform: translateY(-4px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+#control-btn.visible {
+  opacity: 1;
   pointer-events: auto;
 }
 
-#hover-menu-container:hover #menu-items,
-#hover-menu-container:focus-within #menu-items {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+#control-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
 }
 
-.menu-btn {
-  background: transparent;
-  border: none;
+/* Status badges */
+#status-badges {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.5);
   color: #cbd5e1;
-  font-family: inherit;
-  font-size: 11px;
-  text-align: left;
-  padding: 5px 10px;
-  border-radius: 4px;
-  cursor: pointer;
+}
+
+.badge.warn {
+  border-color: rgba(239, 68, 68, 0.8);
+  color: #fca5a5;
+}
+
+/* Action feed (bottom-left, click-through) */
+#action-feed {
+  position: absolute;
+  left: 10px;
+  bottom: 12px;
+  width: 160px;
+  list-style: none;
+  pointer-events: none;
+  z-index: 15;
+}
+
+#action-feed.hidden {
+  display: none;
+}
+
+#action-feed li {
+  font-size: 10px;
+  line-height: 1.35;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-left: 2px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.78);
+  color: #e2e8f0;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.menu-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f8fafc;
-}
-
-.menu-btn.stop-btn {
-  color: #f87171;
-  font-weight: bold;
-}
-
-.menu-btn.stop-btn:hover {
-  background: rgba(239, 68, 68, 0.4);
-  color: #ffffff;
-}
-
-.menu-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+#action-feed li.done { border-left-color: #22c55e; }
+#action-feed li.error, #action-feed li.block { border-left-color: #ef4444; color: #fecaca; }
+#action-feed li.ask, #action-feed li.countdown { border-left-color: #f59e0b; }
+#action-feed li.mode { border-left-color: #3b82f6; }
