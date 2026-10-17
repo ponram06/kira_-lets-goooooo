@@ -78,3 +78,38 @@ M11. DOCUMENTATION AND HANDOFF
 README (install, run, configuration, modes, a tools table with risk levels, the safety model), docs/ARCHITECTURE.md with a Mermaid diagram, docs/USER_GUIDE.md with a voice command cheat sheet, docs/DEMO_SCRIPT.md (demo order including a deliberate error and the kill switch), docs/LIMITATIONS.md, THIRD_PARTY_NOTICES.md (licenses, plus notes on character and asset ownership), and an updated status in AGENTS.md.
 
 When all milestones are done, print a final summary: what exists, what is partial, what I must test by hand, and the exact command to run the whole test suite.
+
+FINAL COMPLETION CHECK (run when I say: run the completion check, and automatically at the end of Phase 3)
+
+Purpose: prove, with evidence, whether every requirement in this project is really finished. Do not rely on earlier status notes, commit messages or your memory. Re-verify.
+
+1. Build the checklist
+- Read AGENTS.md and this whole file. Turn every goal, milestone and bullet point (M1 to M11, M2B, the demo scenarios, the safety rules and the working rules) into one numbered line in docs/COMPLETION_CHECKLIST.md.
+- Also add these end-to-end requirements as lines:
+  a. Voice in, answer out (push-to-talk, Groq Whisper with local fallback, Edge TTS with fallback).
+  b. Answers any question like a mentor, with conversation memory.
+  c. The demo: open VS Code, create demo/hello.py, type the code visibly, run it in a visible CMD, speak the output.
+  d. Any-task behavior: open Spotify and play a song; open WhatsApp and send a message to a contact; open any installed app; browser task; script task; screen-control task; save and replay a skill. Each must show which path was chosen and report honestly when it fails.
+  e. Restricted and Free modes (PIN, countdown, auto-revert, forced Restricted on Ollama), ask-first for risky or uncertain actions, and the kill switch in every mode.
+  f. Provider fallback Groq, OpenRouter, Ollama, with spoken notices.
+  g. The avatar: transparent, always on top, stays after settings close, tray, hover control button and menu, position remembered, click-through, lip sync, 2D sprite and 3D VRM with automatic fallback, Kira and Ryuk personas.
+  h. Settings window, doctor command, installer or portable build, clean-install test, README and all docs, third-party notices.
+  i. Security and hygiene: no secrets or personal data in the repo or history, logs redacted, nothing pushed to a remote.
+
+2. Verify each line with evidence
+For each line, record one status and the proof:
+- DONE: name the file or function, the exact test name or command you ran now, and its real output. A test that mocks away the very behavior being claimed is not enough: say what is mocked.
+- PARTIAL: say exactly what works and what is missing.
+- MISSING: nothing exists yet.
+- NEEDS HAND TEST: it needs my screen, voice, real accounts or hardware. Put it in docs/MANUAL_TEST.md with exact steps and the expected result.
+Run the full pytest suite, the Electron tests, python -m backend.doctor, ruff, bandit, pip-audit and npm audit during this check and include the real numbers.
+
+3. Check the rules were followed
+Verify, with commands, that: nothing was pushed (git status -sb and git log origin/main..HEAD); no .env, keys, PIN, contacts, logs, screenshots or model files are tracked (git ls-files and a pattern scan of the history); policy.py and the kill switch were not weakened (compare the policy decision table in docs/POLICY_TABLE.md with the tests); no test was deleted or loosened to make it pass (check git log -p on tests/ for removed assertions and skips).
+
+4. Fix the gaps
+For every PARTIAL or MISSING line: write a short plan, implement it, add a test, run the suite, commit, update docs/COMPLETION_CHECKLIST.md and docs/PROGRESS.md. Repeat the check until nothing is PARTIAL or MISSING, or until you are blocked. If blocked (needs my decision, a package, a model file or an account), say exactly what you need from me.
+
+5. Report
+Print a summary table: total lines, DONE, PARTIAL, MISSING, NEEDS HAND TEST. Then print: (a) the verdict, one of COMPLETE, COMPLETE EXCEPT HAND TESTS, or NOT COMPLETE; (b) the blockers; (c) the 10 biggest remaining risks, ranked; (d) the exact numbered list of what I must test by hand first.
+Never claim COMPLETE if any line is PARTIAL or MISSING, or if a required check could not be run. Say plainly what you could not check.
