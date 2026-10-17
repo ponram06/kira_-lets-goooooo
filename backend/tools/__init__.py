@@ -18,6 +18,7 @@ from backend.tools.reminders_tool import cancel_reminder, list_reminders, set_re
 from backend.tools.app_launcher import media_control, open_any_app
 from backend.tools.whatsapp_tool import send_whatsapp
 from backend.tools.script_runner import run_script
+from backend.tools.screen_tool import screen_task
 from backend.tools.browser_tools import (
     browser_back,
     browser_click,
@@ -55,6 +56,8 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "send_whatsapp": send_whatsapp,
     # M5 self-written scripts
     "run_script": run_script,
+    # M6 screen control (the agent awaits screen_tool.run_screen_task instead)
+    "screen_task": screen_task,
     # M4 browser tools
     "browser_open": browser_open,
     "browser_search": browser_search,
@@ -277,6 +280,12 @@ M4_TOOLS_SCHEMA: list[dict] = [
 ]
 
 KIRA_TOOLS_SCHEMA.extend(M2_TOOLS_SCHEMA)
+KIRA_TOOLS_SCHEMA.append(_fn(
+    "screen_task",
+    "LAST RESORT: control the screen with mouse and keyboard to reach a goal when no adapter, "
+    "built-in tool, browser tool or script can do it. Kira looks at screenshots and does one action at a time.",
+    {"goal": {"type": "string", "description": "What should be visibly achieved on screen"}},
+    ["goal"]))
 KIRA_TOOLS_SCHEMA.append(_fn(
     "run_script",
     "Write and run a short Python script (computation, text or file work inside workspace/scripts/). "

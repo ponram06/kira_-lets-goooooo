@@ -182,6 +182,21 @@ scripts:
   docker_image: "python:3.11-slim"
 
 # =============================================================================
+# Screen control (Milestone 6) — last resort of the any-task planner
+# Disabled automatically on Ollama. vision_provider must name a cloud entry
+# in providers: whose model accepts images (set vision_model to override).
+# =============================================================================
+screen_control:
+  enabled: true
+  vision_provider: null       # e.g. openrouter (null = screen control disabled)
+  vision_model: null          # e.g. a vision-capable model id on that provider
+  max_actions: 10
+  highlight_ms: 700
+  max_image_width: 1280
+  max_image_height: 800
+  type_interval: 0.02
+
+# =============================================================================
 # Browser automation settings (Milestone 4 - Playwright)
 # =============================================================================
 browser:

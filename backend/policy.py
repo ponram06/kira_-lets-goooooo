@@ -258,6 +258,19 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None, "free_auto": True,
     },
+    # M6 screen control: starting a task is harmless by itself (it refuses on
+    # Ollama / without a vision provider); EVERY action is a screen_action
+    # that asks in Restricted and is allowed in Free.
+    "screen_task": {
+        "risk": RiskLevel.LOW, "allowlisted": True,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None,
+    },
+    "screen_action": {
+        "risk": RiskLevel.MEDIUM, "allowlisted": False,
+        "affects_people": False, "outside_workspace": False,
+        "forbidden_category": None, "free_auto": True,
+    },
     # Reading a file outside workspace (not allowlisted → ask)
     "read_file_outside": {
         "risk": RiskLevel.MEDIUM, "allowlisted": False,

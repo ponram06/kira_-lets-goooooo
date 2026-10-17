@@ -45,6 +45,7 @@ const { clampToBounds, findDisplayForWindow, resolveStartPosition } = require('.
 const { scaleFor, scaledWindowSize } = require('../shared/sizes');
 const { buildHitMask, isMaskNonEmpty } = require('../shared/hitmask');
 const { ChatFocus } = require('./chat-focus');
+const { showHighlight } = require('./highlight-overlay');
 
 // Disable all touch/trackpad pinch-to-zoom gestures at Chromium engine level
 app.commandLine.appendSwitch('disable-pinch');
@@ -401,6 +402,10 @@ function setAvatarPrefs(prefs) {
 function trackBackendEvent(type, payload) {
   let changed = true;
   switch (type) {
+    case 'screen_highlight':
+      showHighlight(payload, { BrowserWindow, screen });
+      changed = false;
+      break;
     case 'auth_ok':
       live.connected = true;
       break;

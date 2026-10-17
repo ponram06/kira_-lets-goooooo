@@ -281,6 +281,27 @@ M6: screen control — `backend/tools/screen_control.py` (vision provider from c
 
 ---
 
+## M6. Screen control — done, needs hand test (2026-10-17)
+
+### What was done
+- `backend/screen/`: `geometry.py` (per-monitor DPI awareness, monitor rects, screenshot↔screen mapping incl. negative coordinates), `capture.py` (in-memory downscaled PNG, change digest), `safety.py` (sensitive windows, credential/OTP/card/secret text, key allow-list, bounds and monitor-gap checks), `vision.py` (OpenAI-compatible image request, JSON action parsing, never Ollama), `controller.py` (one action at a time, highlight, policy per action, verify via next screenshot, 10-action cap, kill switch before each step and right before acting).
+- `backend/tools/screen_tool.py`: real deps (GDI screenshot, pyautogui, foreground lookup) and `run_screen_task`; the agent awaits it so each action can be confirmed. Direct `screen_task` calls fail closed.
+- Policy: `screen_task` LOW (it refuses when unavailable), `screen_action` MEDIUM `free_auto` → **ask every action in Restricted**, allow in Free, block on kill switch.
+- Server forwards `screen.highlight` as `screen_highlight`; Electron `highlight-overlay.js` draws a click-through, non-focusable ring for ~0.7 s.
+- `config.yaml` `screen_control:` (vision provider null by default = disabled).
+
+### Tests
+- pytest **434 passed, 1 skipped** (48 new in `tests/test_screen_control.py`). Electron **71 passed** (5 new in `tests/highlight.test.js`; found and fixed a null message drawing a ring at 0,0).
+
+### Known gaps
+- Never run against a real screen or a real vision model here (no vision provider configured). Needs hand test after you set `screen_control.vision_provider`/`vision_model`.
+- Sensitive-window detection is title/process based; a site that hides its purpose in the title is not detected.
+
+### NEXT STEP
+M7: learned skills — `backend/skills.py` (JSON recipes in user config dir, offer to save after a successful multi-step task, replay through the same policy checks, list/run/rename/delete).
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).

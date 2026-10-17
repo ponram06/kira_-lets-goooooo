@@ -497,6 +497,17 @@ class WebSocketServer:
         elif event_type == "assistant.reply":
             formatted = {"type": "reply", "text": truncate_text(str(data.get("text", "")), 1000), "timestamp": ts}
 
+        elif event_type == "screen.highlight":
+            try:
+                formatted = {
+                    "type": "screen_highlight",
+                    "x": int(data.get("x", 0)), "y": int(data.get("y", 0)),
+                    "ms": max(100, min(3000, int(data.get("ms", 700)))),
+                    "timestamp": ts,
+                }
+            except (TypeError, ValueError):
+                formatted = None
+
         elif event_type == "app.shutdown":
             formatted = {"type": "shutdown", "timestamp": ts}
 

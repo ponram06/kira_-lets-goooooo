@@ -397,6 +397,13 @@ class AgentRunner:
                             observation = f"CANCELLED: '{fn_name}' was cancelled during countdown."
                         else:
                             observation = await self._run_tool(fn_name, fn_args, log_args)
+                elif decision == "allow" and fn_name == "screen_task":
+                    from backend.tools.screen_tool import run_screen_task
+                    _events.publish("tool.start", "Running: screen_task", {"tool": fn_name, "args": log_args})
+                    observation = await run_screen_task(
+                        str(fn_args.get("goal", "")), last_provider, self.mode_manager,
+                        self._confirm, self.speak)
+                    _events.publish("tool.done", "Done: screen_task", {"tool": fn_name, "result": observation[:200]})
                 elif decision == "allow":
                     observation = await self._run_tool(fn_name, fn_args, log_args)
                     if isinstance(observation, str) and observation.startswith("Confirmation required:"):

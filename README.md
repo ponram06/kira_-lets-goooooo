@@ -532,6 +532,18 @@ The model can write a short Python script; Kira saves it as `workspace/scripts/<
 
 Test: `.venv\Scripts\python.exe -m pytest -q tests\test_script_runner.py`
 
+### M6. Screen Control (last resort)
+
+When no adapter, built-in tool, browser tool or script fits, the agent can call `screen_task(goal)`. Kira takes a screenshot (kept in memory only), a **vision-capable cloud provider** proposes one action (click, double-click, type, key, scroll), Kira checks it, shows a red ring on the target, then acts and verifies with the next screenshot. At most **10 actions** per task, then it stops and asks.
+
+- **Setup**: in `config.yaml` set `screen_control.vision_provider` to a provider entry (for example `openrouter`) and `vision_model` to a model on it that accepts images. With `null` (the default) screen control is disabled and Kira says so.
+- **Restricted mode asks before every action** (the prompt shows the action; the model's reason is marked untrusted). Free mode acts without asking.
+- **Refuses** when the foreground window looks sensitive (password managers, banking/payment/checkout, Windows Security, UAC, credential prompts, registry editor), types no passwords, one-time codes, PINs, card numbers or stored secrets, allows only safe keys (no Win-key combos, no Ctrl+Alt+Del, no Alt+F4), and rejects targets outside the screenshot or in gaps between monitors.
+- **Disabled automatically on Ollama** (and after an Ollama fallback until you enter Free mode again). The kill switch is checked before each step and right before acting; moving the mouse into a screen corner also aborts (pyautogui fail-safe).
+- DPI: the backend runs per-monitor DPI aware, so screenshot and click coordinates are physical pixels; the highlight ring converts them to Electron DIPs.
+
+Test: `.venv\Scripts\python.exe -m pytest -q tests	est_screen_control.py` and `cd avatar; npm test`
+
 ### Avatar Chat Box (Fallback Input)
 
 When a microphone is unavailable or muted, or when you prefer typing:
