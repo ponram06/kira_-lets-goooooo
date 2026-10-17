@@ -384,7 +384,7 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 | **M7. Learned skills** | Done | Verified with mocks + Needs hand test | JSON skill recipes, tamper resistance, and nested agent execution verified with offline unit tests. Spoken skill saving/replay requires voice testing. |
 | **M8. 3D avatar (VRM)** | Done (Generated model) | Tested with mocks + Smoke verified | Three.js / @pixiv/three-vrm renderer, animations, lip sync, expressions, and 2D sprite fallback verified with 114 Node tests and hidden-window smoke test. Real user `.vrm` model requires manual visual test. |
 | **M9. Persona & polish** | Done | Tested with mocks + Needs hand test | Live Edge voice switching, notebook/Gotham themes, mode glow, startup greeting, and error handling verified with tests. Audio pitch/tone and theme visual polish require hand testing. |
-| **M10. Packaging** | **IN PROGRESS** | Unfinished work | `backend/paths.py` (writable locations abstraction) and `requirements-dev.txt` created; PyInstaller bundling, electron-builder config, log rotation, setup script, and clean-venv test are in progress. |
+| **M10. Packaging** | Done | Verified locally (one-folder build) | Size-capped log rotation (5 MB), `scripts/setup.bat`, pinned `requirements.lock`, clean venv test, `electron-builder` configuration, and PyInstaller `kira-backend.exe` one-folder distribution built and smoke-tested. |
 | **M11. Documentation & Handoff** | Not started | Pending M10 | Architecture diagrams, user guide, demo script, third-party notices, and completion checklist. |
 
 ### Sub-step M10.a: Size-Capped Log Rotation — done (2026-10-17)
@@ -405,8 +405,15 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
   - `BackendProcess` dynamically passes `['--headless']` (without `-m backend.main`) when spawning compiled executable binaries.
 - Added unit tests in `avatar/tests/controls.test.js` (116 Electron tests passing).
 
+### Sub-step M10.d: PyInstaller Bundling of Backend — done (2026-10-17)
+- Created `kira_backend.spec` bundling backend into a standalone one-folder distribution under `dist/backend/` with entrypoint `kira-backend.exe`.
+- Embedded `config.yaml` and `.env.example` as application data assets.
+- Collected all submodules and dynamic DLLs (`numpy`, `sounddevice`, `playwright`, `comtypes`, `pycaw`, `websockets`).
+- Successfully built `dist/backend/kira-backend.exe` on first attempt; smoke-tested with `--help` (clean exit code 0).
+
 ### NEXT STEP
-M10.d: PyInstaller bundling of the backend (one-folder distribution with config & prompt assets).
+M11: Documentation and handoff — docs/ARCHITECTURE.md with Mermaid diagrams, docs/USER_GUIDE.md, docs/DEMO_SCRIPT.md, docs/LIMITATIONS.md, THIRD_PARTY_NOTICES.md, and updated README.md.
+
 
 
 
