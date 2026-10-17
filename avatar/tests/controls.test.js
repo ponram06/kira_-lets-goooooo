@@ -75,11 +75,24 @@ describe('Tray menu', () => {
 });
 
 describe('Avatar menu', () => {
-  it('contains every M1 control', () => {
+  it('contains every M1 and M2 control', () => {
     const { actions } = recorder();
     const l = labels(buildAvatarTemplate(baseState, actions));
-    assert.deepEqual(l, ['Mute microphone', 'Sleep', 'Persona', 'Mode', 'Size', 'Lock position',
+    assert.deepEqual(l, ['Mute microphone', 'Chat…', 'Sleep', 'Persona', 'Mode', 'Size', 'Lock position',
       'Show action feed', 'Settings…', 'Stop task', 'Quit Kira']);
+  });
+
+  it('Chat item opens chat when idle and is disabled when working', () => {
+    const { calls, actions } = recorder();
+    const idleMenu = buildAvatarTemplate({ ...baseState, state: 'idle' }, actions);
+    const chatItem = find(idleMenu, 'Chat');
+    assert.ok(chatItem);
+    assert.equal(chatItem.enabled, true);
+    chatItem.click();
+    assert.deepEqual(calls, [['openChat']]);
+
+    const workingMenu = buildAvatarTemplate({ ...baseState, state: 'working' }, actions);
+    assert.equal(find(workingMenu, 'Chat').enabled, false);
   });
 
   it('sleep and mute are separate actions', () => {
@@ -389,5 +402,16 @@ describe('Control command schema', () => {
     const msg = createCommand('get_status', { command: 'shutdown' }, 'r9');
     assert.equal(msg.command, 'get_status');
     assert.equal(msg.request_id, 'r9');
+  });
+
+  it('accepts valid user_text command within 2000 chars and rejects invalid', () => {
+    assert.equal(isValidCommand(createCommand('user_text', { text: 'Hello Kira' }, 'r10')), true);
+    assert.equal(isValidCommand(createCommand('user_text', { text: 'a'.repeat(2000) })), true);
+    // Rejects empty, missing, whitespace-only, non-string, or > 2000 chars
+    assert.equal(isValidCommand({ command: 'user_text', text: '' }), false);
+    assert.equal(isValidCommand({ command: 'user_text', text: '   ' }), false);
+    assert.equal(isValidCommand({ command: 'user_text' }), false);
+    assert.equal(isValidCommand({ command: 'user_text', text: 12345 }), false);
+    assert.equal(isValidCommand({ command: 'user_text', text: 'a'.repeat(2001) }), false);
   });
 });

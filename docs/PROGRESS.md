@@ -46,5 +46,48 @@ One entry per milestone from docs/MASTER_PROMPT.md. Newest at the bottom.
 - `logs/backend.log` isn't rotated yet (planned for M10).
 - `docs/MASTER_PROMPT.md` mentions the first name "Meldan" as a test contact (a name only, no number).
 
+---
+
+---
+
+## M2. System and app tools — done (2026-10-17)
+
+> **Note on commit `9b2bb3e`**: Commit `9b2bb3e` was labeled `wip: M1 in progress (Claude limit reached)` when Claude Code reached its token usage limit. In reality, Milestone 1 was already completed in commit `19f2d92`; commit `9b2bb3e` contained the initial implementation of Milestone 2 (system controls, persistent reminders, and countdown).
+
+### What was done
+- **System controls** (`backend/tools/system_control.py`):
+  - `volume`: up, down, set, mute, unmute, get via pycaw; clamps percentages, handles errors gracefully.
+  - `brightness`: up, down, set, get via screen_brightness_control; primary display, minimum 5% safety floor.
+  - `lock_pc`: locks Windows session via `LockWorkStation` (MEDIUM risk, asks in Restricted, auto-allows in Free).
+  - `take_screenshot`: captures virtual desktop via GDI/ctypes, encodes PNG via zlib, saves strictly into `workspace/<screenshots_dir>/` (MEDIUM risk, asks in Restricted, auto-allows in Free).
+  - `system_info`: CPU %, RAM use/total, and battery status with charging state via psutil. Verified to return zero secrets.
+- **Timers and reminders** (`backend/reminders.py`, `backend/tools/reminders_tool.py`):
+  - Local scheduler storing `reminders.json` in user directory outside git.
+  - Event loop sleep calculation without polling loops; wakes on changes.
+  - Fires `reminder.due` events, triggers spoken read-back via `VoiceManager`, and records missed reminders across restarts.
+  - Tools `set_timer`, `set_reminder`, `list_reminders`, `cancel_reminder` registered in `TOOL_REGISTRY` as LOW risk.
+- **Agent countdown & free mode safety** (`backend/countdown.py`):
+  - 3-second spoken and on-screen countdown with cancel for medium/high risk actions in Free mode.
+- **Avatar Chat Box (Fallback Input)**:
+  - Added chat input dock overlay to `avatar/src/renderer/index.html` and `avatar/src/renderer/style.css`.
+  - Added "Chat…" item to avatar menu (`avatar/src/main/menu.js`). Opens **only** on explicit menu click (no auto-open, no Enter/Space trigger). Refused while Kira's state is "working".
+  - Window temporarily becomes focusable only while the chat box is open, and reverts to `focusable: false` on send, Escape, or blur, ensuring active typing in VS Code is never interrupted.
+  - Plain text only (`textContent` exclusively, no HTML rendering).
+- **Backend & Avatar Protocol for `user_text`**:
+  - `user_text` requires authenticated WebSocket session, is capped at 2000 characters, and is rate-limited (max 5/sec).
+  - `async_shared_confirm` in `backend/voice.py` explicitly buffers `chat_box`/`user_text` so that chat text **never acts as an answer to an ask-first confirmation prompt** (only explicit `confirm` with the matching `question_id` or terminal/voice can answer).
+- **Tests**:
+  - Python: **270 passed, 1 skipped** (100% offline pass rate). 38 tests in `tests/test_system_tools.py`, covering mock hardware, policy enforcement, reminder lifecycle, countdown, screenshot workspace containment, system_info secret protection, and user_text confirmation isolation.
+  - Electron: **58 passed** in `avatar/` (`tests/avatar.test.js` and `tests/controls.test.js`), covering chat menu state, working-state refusal, and user_text schema validation.
+
 ### Next milestone
-M2. System and app tools.
+M2B. Universal app launcher, app adapters and the any-task planner.
+
+---
+
+## Overall Milestones Status Summary
+- **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
+- **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
+- **M2B. Universal app launcher & adapters**: Not started (next).
+- **M3. Messaging (WhatsApp adapter)**: Not started.
+- **M4. Browser tasks (Playwright)**: Not started.

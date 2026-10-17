@@ -1252,6 +1252,7 @@ async def async_shared_confirm(
 
     approved = False
     start_time = time.monotonic()
+    buffered_chat: list[tuple[str, str, Optional[float]]] = []
 
     try:
         while (time.monotonic() - start_time) < timeout_seconds:
@@ -1272,15 +1273,19 @@ async def async_shared_confirm(
             # 2. Check unified user_queue (handles typed input and push-to-talk voice)
             if user_queue:
                 try:
-                    source, answer, _ = user_queue.get_nowait()
-                    norm = normalize_utterance(answer)
-                    if norm in ("yes", "y"):
-                        approved = True
-                        logger.info("Confirmation granted via %s: '%s'", source, answer)
+                    source, answer, ts = user_queue.get_nowait()
+                    if source in ("chat_box", "user_text"):
+                        # user_text from avatar chat box cannot act as confirmation answer
+                        buffered_chat.append((source, answer, ts))
                     else:
-                        approved = False
-                        logger.info("Confirmation declined via %s: '%s'", source, answer)
-                    break
+                        norm = normalize_utterance(answer)
+                        if norm in ("yes", "y"):
+                            approved = True
+                            logger.info("Confirmation granted via %s: '%s'", source, answer)
+                        else:
+                            approved = False
+                            logger.info("Confirmation declined via %s: '%s'", source, answer)
+                        break
                 except asyncio.QueueEmpty:
                     pass
 
@@ -1295,6 +1300,9 @@ async def async_shared_confirm(
             _active_confirm_queue = None
         if voice_manager:
             voice_manager.on_utterance = previous_callback
+        if user_queue and buffered_chat:
+            for item in buffered_chat:
+                user_queue.put_nowait(item)
 
     return approved
 

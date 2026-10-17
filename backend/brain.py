@@ -171,8 +171,8 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
     loop = asyncio.get_running_loop()
     state.bind_loop(loop)
     scheduler.start(loop)
-    # Typed text from the avatar chat box joins the same queue as terminal input
-    state.set_text_sink(lambda text: loop.call_soon_threadsafe(user_queue.put_nowait, ("typed", text, None)))
+    # Typed text from the avatar chat box joins the user queue tagged as chat_box
+    state.set_text_sink(lambda text: loop.call_soon_threadsafe(user_queue.put_nowait, ("chat_box", text, None)))
     voice_manager.start_hotkey_listener(loop)
 
     async def on_voice_utterance(utterance: str, speech_end_time: float) -> None:

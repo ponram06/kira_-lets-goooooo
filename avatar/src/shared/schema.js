@@ -17,7 +17,9 @@ const ALLOWED_COMMANDS = Object.freeze([
   'set_sleep',
   'get_status',
   'reload_settings',
-  'shutdown'
+  'shutdown',
+  // M2 chat box fallback
+  'user_text'
 ]);
 
 /**
@@ -85,6 +87,12 @@ function isValidCommand(message) {
       return false;
     }
     if (typeof parsed.value !== 'string' || !['yes', 'no'].includes(parsed.value.trim().toLowerCase())) {
+      return false;
+    }
+  }
+
+  if (lowerCmd === 'user_text') {
+    if (typeof parsed.text !== 'string' || !parsed.text.trim() || parsed.text.length > 2000) {
       return false;
     }
   }

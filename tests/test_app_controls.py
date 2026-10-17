@@ -305,9 +305,17 @@ async def test_user_text_and_cancel_countdown_commands(harness):
     assert (await _ack(ws, "user_text"))["status"] == "executed"
     await ws.send(json.dumps({"command": "user_text", "text": "x" * 3000}))
     assert (await _ack(ws, "user_text"))["status"] == "invalid"
+    # Rapid sending to test rate limiting
+    for _ in range(4):
+        await ws.send(json.dumps({"command": "user_text", "text": "quick"}))
+        await _ack(ws, "user_text")
+    await ws.send(json.dumps({"command": "user_text", "text": "rate limit test"}))
+    ack = await _ack(ws, "user_text")
+    assert ack["status"] == "rate_limited"
+
     await ws.send(json.dumps({"command": "cancel_countdown"}))
     assert (await _ack(ws, "cancel_countdown"))["status"] == "executed"
-    assert got == ["what time is it"]
+    assert got[0] == "what time is it"
     await ws.close()
 
 

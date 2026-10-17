@@ -55,6 +55,11 @@ function buildAvatarTemplate(state, actions) {
   return [
     micItem(state, actions),
     {
+      label: 'Chat…',
+      enabled: Boolean(state.connected && state.state !== 'working'),
+      click: () => actions.openChat && actions.openChat()
+    },
+    {
       label: state.sleeping ? 'Wake' : 'Sleep',
       enabled: Boolean(state.connected),
       click: () => actions.setSleeping(!state.sleeping)

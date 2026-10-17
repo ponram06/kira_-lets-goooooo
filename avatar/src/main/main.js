@@ -86,6 +86,7 @@ let characterImageMeta = { width: 0, height: 0, isPlaceholder: false };
 // Live state mirrored from the backend (snapshot + events)
 const live = {
   connected: false,
+  state: 'idle',
   persona: 'kira',
   personas: ['kira', 'ryuk'],
   micMuted: false,
@@ -196,6 +197,7 @@ function sendUiState() {
 function menuState() {
   return {
     visible: Boolean(mainWindow && mainWindow.isVisible()),
+    state: live.state,
     micMuted: live.micMuted,
     persona: live.persona,
     personas: live.personas,
@@ -272,6 +274,12 @@ function createWindow() {
   });
   mainWindow.on('show', rebuildTray);
   mainWindow.on('hide', rebuildTray);
+  mainWindow.on('blur', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('avatar:blur-chat');
+      mainWindow.setFocusable(false);
+    }
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -316,7 +324,14 @@ const menuActions = {
   requestFree: () => pinDialog.open(),
   setSize: (size) => applySize(size),
   setLocked: (locked) => { userCfg.locked = locked; saveUserCfg(); sendUiState(); rebuildTray(); },
-  setFeedVisible: (visible) => { userCfg.feedVisible = visible; saveUserCfg(); sendUiState(); }
+  setFeedVisible: (visible) => { userCfg.feedVisible = visible; saveUserCfg(); sendUiState(); },
+  openChat: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (live.state === 'working') return; // Refuse to open while working
+    mainWindow.setFocusable(true);
+    mainWindow.webContents.send('avatar:open-chat');
+    mainWindow.focus();
+  }
 };
 
 function rebuildTray() {
@@ -421,8 +436,16 @@ function trackBackendEvent(type, payload) {
       live.sleeping = Boolean(payload.sleeping);
       break;
     case 'state':
+      if (payload.state) live.state = payload.state;
       if (payload.state === 'offline') live.connected = false;
-      else changed = false;
+      break;
+    case 'step_start':
+    case 'tool_start':
+      live.state = 'working';
+      break;
+    case 'step_done':
+    case 'tool_done':
+      live.state = 'idle';
       break;
     default:
       changed = false;
@@ -551,6 +574,28 @@ function setupIpcHandlers() {
 
   ipcMain.on('avatar:stop', (event) => {
     if (fromAvatar(event) && wsClient) wsClient.sendStop();
+  });
+
+  ipcMain.on('avatar:open-chat', (event) => {
+    if (fromAvatar(event)) menuActions.openChat();
+  });
+
+  ipcMain.on('avatar:close-chat', (event) => {
+    if (fromAvatar(event) && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setFocusable(false);
+    }
+  });
+
+  ipcMain.on('avatar:send-text', (event, data) => {
+    if (!fromAvatar(event)) return;
+    const text = typeof data === 'string' ? data : (data?.text || '');
+    const clean = String(text || '').trim();
+    if (clean && clean.length <= 2000 && wsClient) {
+      wsClient.send('user_text', { text: clean });
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setFocusable(false);
+    }
   });
 }
 

@@ -435,6 +435,34 @@ output, event text and data, `logs/events.jsonl` and every WebSocket payload.
 
 ---
 
+## M2. System and App Tools
+
+Kira includes local system controls, persistent timers/reminders, and a fallback chat box in the avatar window.
+
+### Tool Table & Risk Levels
+
+| Tool | Risk Level | Restricted Mode | Free Mode | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `volume` | **LOW** | Allow | Allow | Speaker volume control (`up`, `down`, `set`, `mute`, `unmute`, `get`) via `pycaw`. |
+| `brightness` | **LOW** | Allow | Allow | Main display brightness (`up`, `down`, `set`, `get`) with a safe 5% floor via `screen_brightness_control`. |
+| `system_info` | **LOW** | Allow | Allow | Reports CPU %, RAM use/total, and battery state via `psutil`. Never returns or logs secrets. |
+| `lock_pc` | **MEDIUM** | Ask first | Allow | Locks Windows session immediately via `LockWorkStation`. |
+| `take_screenshot` | **MEDIUM** | Ask first | Allow | Captures all displays via GDI/ctypes, encodes PNG in-memory, and writes strictly inside `workspace/screenshots/`. |
+| `set_timer` | **LOW** | Allow | Allow | Local countdown timer announced out loud and visually when complete. |
+| `set_reminder` | **LOW** | Allow | Allow | Persistent reminder scheduled at a local time (`HH:MM` or `YYYY-MM-DD HH:MM`). Survives assistant restarts. |
+| `list_reminders` | **LOW** | Allow | Allow | Lists active timers and reminders with their IDs. |
+| `cancel_reminder` | **LOW** | Allow | Allow | Cancels a pending timer or reminder by ID. |
+
+### Avatar Chat Box (Fallback Input)
+
+When a microphone is unavailable or muted, or when you prefer typing:
+- **Opening**: Click the avatar hover button (⋯) or right-click the avatar → **Chat…**.
+- **Refused while Working**: The "Chat…" menu option is disabled while Kira is busy executing a task.
+- **Focus Safety**: The avatar window is `focusable: false` by default so it never steals focus from VS Code or terminals. The window temporarily becomes focusable only while the chat box is open, and returns to `focusable: false` on Send, Escape, or clicking away (blur).
+- **Safety**: `user_text` is rate-limited, capped at 2000 characters, requires an authenticated session, and **never acts as an answer to an ask-first confirmation prompt** (only explicit `confirm` messages with the matching `question_id` can confirm actions). Text is rendered with `textContent` only.
+
+---
+
 ## Known Limits & Safety Notes
 
 1. **VS Code PATH**: VS Code must be installed with the `code` CLI tool available on system `PATH`.

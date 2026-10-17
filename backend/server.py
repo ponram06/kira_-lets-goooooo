@@ -780,9 +780,16 @@ class WebSocketServer:
 
         elif cmd == "user_text":
             text = data.get("text")
-            if st is None or not isinstance(text, str) or not text.strip() or len(text) > 2000:
+            now = time.monotonic()
+            if not hasattr(websocket, "_user_text_ts"):
+                websocket._user_text_ts = collections.deque(maxlen=5)
+            ts_queue = websocket._user_text_ts
+            if len(ts_queue) == 5 and (now - ts_queue[0]) < 1.0:
+                ack["status"] = "rate_limited"
+            elif st is None or not isinstance(text, str) or not text.strip() or len(text) > 2000:
                 ack["status"] = "invalid"
             else:
+                ts_queue.append(now)
                 ack["status"] = "executed" if st.submit_text(text) else "unavailable"
 
         elif cmd == "cancel_countdown":

@@ -28,6 +28,15 @@
 
     <!-- Action feed: last few tool events (not clickable, stays click-through) -->
     <ul id="action-feed" aria-label="Action feed"></ul>
+
+    <!-- Chat box: opens ONLY via explicit "Chat…" click in avatar menu -->
+    <div id="chat-dock" class="hidden">
+      <form id="chat-form">
+        <input id="chat-input" type="text" maxlength="2000" placeholder="Ask Kira anything…" autocomplete="off" spellcheck="false" />
+        <button type="submit" id="chat-send-btn" title="Send (Enter)">Send</button>
+        <button type="button" id="chat-close-btn" title="Close (Esc)">✕</button>
+      </form>
+    </div>
   </div>
 
   <script src="../shared/feed.js"></script>

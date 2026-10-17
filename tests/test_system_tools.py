@@ -380,3 +380,51 @@ async def test_free_mode_countdown_cancelled(monkeypatch):
     await runner.run([{"role": "user", "content": "send"}])
     assert tool.call_count == 0
     mm.enter_restricted()
+
+
+# ── M2 Security & Isolation Tests ──────────────────────────────────────────
+
+def test_take_screenshot_policy_risk_and_directory(workspace, monkeypatch):
+    """take_screenshot must ask in Restricted, allow in Free, and stay inside workspace/."""
+    assert check("take_screenshot", Mode.RESTRICTED) == "ask"
+    assert check("take_screenshot", Mode.FREE) == "allow"
+
+    monkeypatch.setattr(system_control, "_grab_screen", lambda: (2, 2, bytes(16)))
+    res = system_control.take_screenshot(name="safe_test")
+    assert "workspace/screenshots/safe_test_" in res
+    created = list((workspace / "screenshots").glob("*.png"))
+    assert len(created) == 1
+    # Check that file path is strictly within workspace
+    assert created[0].resolve().is_relative_to(workspace)
+
+
+def test_system_info_returns_no_secrets(monkeypatch):
+    """system_info must never return or leak environment keys or the PIN."""
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_super_secret_test_key_12345")
+    monkeypatch.setenv("KIRA_FREE_MODE_PIN", "4321")
+    info = system_control.system_info()
+    assert "gsk_super_secret" not in info
+    assert "4321" not in info
+    assert "CPU" in info and "RAM" in info
+
+
+@pytest.mark.asyncio
+async def test_user_text_cannot_answer_ask_first_confirmation():
+    """user_text from avatar chat box must NEVER act as an answer to ask-first confirmation."""
+    from backend.voice import async_shared_confirm
+
+    user_queue = asyncio.Queue()
+    # Queue a chat_box message with "yes"
+    await user_queue.put(("chat_box", "yes", None))
+
+    approved = await async_shared_confirm(
+        "Delete database?",
+        timeout_seconds=0.15,
+        user_queue=user_queue,
+    )
+    # Must NOT have approved via the chat_box user_text
+    assert approved is False
+    # The chat_box message must be preserved in the queue for regular chat processing
+    assert not user_queue.empty()
+    item = await user_queue.get()
+    assert item[0] == "chat_box" and item[1] == "yes"

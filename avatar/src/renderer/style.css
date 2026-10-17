@@ -209,3 +209,71 @@ html, body {
 #action-feed li.error, #action-feed li.block { border-left-color: #ef4444; color: #fecaca; }
 #action-feed li.ask, #action-feed li.countdown { border-left-color: #f59e0b; }
 #action-feed li.mode { border-left-color: #3b82f6; }
+
+/* Chat input dock (opens only via avatar menu "Chat…") */
+#chat-dock {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.8);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+  z-index: 40;
+  display: flex;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+#chat-dock.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#chat-form {
+  display: flex;
+  width: 100%;
+  gap: 6px;
+  align-items: center;
+}
+
+#chat-input {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#chat-input:focus {
+  border-color: rgba(239, 68, 68, 0.9);
+}
+
+#chat-send-btn, #chat-close-btn {
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+  color: #f1f5f9;
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+#chat-send-btn:hover {
+  background: rgba(239, 68, 68, 0.8);
+  border-color: rgba(239, 68, 68, 1);
+}
+
+#chat-close-btn:hover {
+  background: rgba(71, 85, 105, 0.8);
+}

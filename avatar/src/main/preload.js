@@ -64,5 +64,28 @@ contextBridge.exposeInMainWorld('kiraAvatar', {
     return () => {
       ipcRenderer.removeListener('avatar:ui', subscription);
     };
+  },
+
+  // M2 Chat box controls
+  onOpenChat: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const subscription = () => callback();
+    ipcRenderer.on('avatar:open-chat', subscription);
+    return () => ipcRenderer.removeListener('avatar:open-chat', subscription);
+  },
+
+  onBlurChat: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const subscription = () => callback();
+    ipcRenderer.on('avatar:blur-chat', subscription);
+    return () => ipcRenderer.removeListener('avatar:blur-chat', subscription);
+  },
+
+  closeChat: () => {
+    ipcRenderer.send('avatar:close-chat');
+  },
+
+  sendText: (text) => {
+    ipcRenderer.send('avatar:send-text', { text });
   }
 });

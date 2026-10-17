@@ -101,7 +101,11 @@
   const controlBtn = document.getElementById('control-btn');
   const feedElem = document.getElementById('action-feed');
   const badgesElem = document.getElementById('status-badges');
-  const interactiveElements = [dragHandle, bubbleElem, controlBtn];
+  const chatDock = document.getElementById('chat-dock');
+  const chatForm = document.getElementById('chat-form');
+  const chatInput = document.getElementById('chat-input');
+  const chatCloseBtn = document.getElementById('chat-close-btn');
+  const interactiveElements = [dragHandle, bubbleElem, controlBtn, chatDock];
   const HIDE_BUTTON_MS = 2000;
   let hideBtnTimer = null;
 
@@ -118,13 +122,79 @@
     if (!elem) continue;
     elem.addEventListener('pointerenter', () => {
       window.kiraAvatar.setIgnoreMouseEvents(false);
-      if (elem !== bubbleElem) showControlButton();
+      if (elem !== bubbleElem && elem !== chatDock) showControlButton();
     });
     elem.addEventListener('pointerleave', (e) => {
-      if (!isDragging && !interactiveElements.some(el => el.contains(e.relatedTarget))) {
+      if (!isDragging && !interactiveElements.some(el => el && el.contains(e.relatedTarget))) {
         window.kiraAvatar.setIgnoreMouseEvents(true, true);
         scheduleHideButton();
       }
+    });
+  }
+
+  // Chat Dock Controller (opens ONLY via explicit "Chat…" click in avatar menu)
+  const closeChat = () => {
+    if (!chatDock) return;
+    chatDock.classList.add('hidden');
+    if (chatInput) chatInput.value = '';
+    window.kiraAvatar.closeChat();
+  };
+
+  if (window.kiraAvatar.onOpenChat) {
+    window.kiraAvatar.onOpenChat(() => {
+      if (!chatDock) return;
+      chatDock.classList.remove('hidden');
+      window.kiraAvatar.setIgnoreMouseEvents(false);
+      if (chatInput) {
+        chatInput.value = '';
+        chatInput.focus();
+      }
+    });
+  }
+
+  if (window.kiraAvatar.onBlurChat) {
+    window.kiraAvatar.onBlurChat(() => {
+      if (chatDock && !chatDock.classList.contains('hidden')) {
+        closeChat();
+      }
+    });
+  }
+
+  if (chatForm) {
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput ? chatInput.value.trim() : '';
+      if (text) {
+        window.kiraAvatar.sendText(text);
+        bubble.say(text); // textContent only
+      }
+      closeChat();
+    });
+  }
+
+  if (chatCloseBtn) {
+    chatCloseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeChat();
+    });
+  }
+
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeChat();
+      }
+    });
+
+    chatInput.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (chatDock && !chatDock.classList.contains('hidden')) {
+          if (document.activeElement !== chatInput && !chatDock.contains(document.activeElement)) {
+            closeChat();
+          }
+        }
+      }, 150);
     });
   }
 
