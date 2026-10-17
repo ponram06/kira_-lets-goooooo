@@ -44,6 +44,7 @@ const { PinDialog } = require('./pin-dialog');
 const { clampToBounds, findDisplayForWindow, resolveStartPosition } = require('../shared/bounds');
 const { scaleFor, scaledWindowSize } = require('../shared/sizes');
 const { buildHitMask, isMaskNonEmpty } = require('../shared/hitmask');
+const { ChatFocus } = require('./chat-focus');
 
 // Disable all touch/trackpad pinch-to-zoom gestures at Chromium engine level
 app.commandLine.appendSwitch('disable-pinch');
@@ -84,6 +85,7 @@ let characterHitMask = null;
 let characterImageMeta = { width: 0, height: 0, isPlaceholder: false };
 
 // Live state mirrored from the backend (snapshot + events)
+const chatFocus = new ChatFocus(() => mainWindow);
 const live = {
   connected: false,
   state: 'idle',
@@ -274,12 +276,7 @@ function createWindow() {
   });
   mainWindow.on('show', rebuildTray);
   mainWindow.on('hide', rebuildTray);
-  mainWindow.on('blur', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('avatar:blur-chat');
-      mainWindow.setFocusable(false);
-    }
-  });
+  mainWindow.on('blur', () => chatFocus.onBlur());
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -325,13 +322,7 @@ const menuActions = {
   setSize: (size) => applySize(size),
   setLocked: (locked) => { userCfg.locked = locked; saveUserCfg(); sendUiState(); rebuildTray(); },
   setFeedVisible: (visible) => { userCfg.feedVisible = visible; saveUserCfg(); sendUiState(); },
-  openChat: () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (live.state === 'working') return; // Refuse to open while working
-    mainWindow.setFocusable(true);
-    mainWindow.webContents.send('avatar:open-chat');
-    mainWindow.focus();
-  }
+  openChat: () => chatFocus.open(live.state) // refused while working
 };
 
 function rebuildTray() {
@@ -451,6 +442,7 @@ function trackBackendEvent(type, payload) {
       changed = false;
   }
   if (changed) {
+    chatFocus.onState(live.state); // a task starting closes the chat box
     rebuildTray();
     sendUiState();
   }
@@ -581,9 +573,7 @@ function setupIpcHandlers() {
   });
 
   ipcMain.on('avatar:close-chat', (event) => {
-    if (fromAvatar(event) && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setFocusable(false);
-    }
+    if (fromAvatar(event)) chatFocus.close();
   });
 
   ipcMain.on('avatar:send-text', (event, data) => {
@@ -593,9 +583,7 @@ function setupIpcHandlers() {
     if (clean && clean.length <= 2000 && wsClient) {
       wsClient.send('user_text', { text: clean });
     }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setFocusable(false);
-    }
+    chatFocus.close();
   });
 }
 
