@@ -92,6 +92,7 @@ FORBIDDEN_CATEGORIES: frozenset[str] = frozenset(
 # affects_people    bool  — involves sending content to another person
 # outside_workspace bool  — the tool can touch paths outside workspace/
 # forbidden_category str | None — maps to FORBIDDEN_CATEGORIES
+# free_countdown    bool  — (MEDIUM only) ask in Restricted, countdown in Free
 # free_auto         bool  — (MEDIUM only) ask in Restricted, allow in Free
 #                           (privacy-sensitive or disruptive but harmless:
 #                           screenshots, locking the PC)
@@ -239,10 +240,11 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": False, "outside_workspace": False,
         "forbidden_category": None,
     },
+    # run_script (M5): Restricted shows the script and asks; Free counts down
     "run_script": {
-        "risk": RiskLevel.MEDIUM, "allowlisted": True,
+        "risk": RiskLevel.MEDIUM, "allowlisted": False,
         "affects_people": False, "outside_workspace": False,
-        "forbidden_category": None,
+        "forbidden_category": None, "free_countdown": True,
     },
     # take_screenshot: ask in Restricted, allow in Free (saved inside workspace/)
     "take_screenshot": {
@@ -680,6 +682,9 @@ def check(
         # free_auto (screenshots, lock): ask in Restricted, allow in Free
         if entry.get("free_auto"):
             return "ask" if mode == Mode.RESTRICTED else "allow"
+        # free_countdown (run_script): ask in Restricted, countdown in Free
+        if entry.get("free_countdown"):
+            return "ask" if mode == Mode.RESTRICTED else "countdown"
         # General MEDIUM: allow when allowlisted and inside workspace
         if allowlisted and not outside_workspace:
             return "allow"

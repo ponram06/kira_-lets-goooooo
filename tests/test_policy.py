@@ -104,8 +104,11 @@ def test_run_command_allowlisted_allow_restricted():
     assert check("run_command", Mode.RESTRICTED) == "allow"
 
 
-def test_run_script_allowlisted_allow_restricted():
-    assert check("run_script", Mode.RESTRICTED) == "allow"
+def test_run_script_asks_restricted_countdown_free():
+    # M5 spec: Restricted shows the script and asks; Free runs after the countdown.
+    # (Was "allow" before M5 — the tool did not exist; the rule is now stricter.)
+    assert check("run_script", Mode.RESTRICTED) == "ask"
+    assert check("run_script", Mode.FREE) == "countdown"
 
 
 def test_run_command_allow_free():

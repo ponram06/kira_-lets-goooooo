@@ -261,11 +261,31 @@ M5: implement `backend/tools/script_runner.py` (`run_script`), make Restricted a
 
 ---
 
+## M5. Self-written scripts — done (2026-10-17)
+
+### What was done
+- `backend/tools/script_runner.py`: `run_script(code, name)` saves to `workspace/scripts/`, AST static checks (import allow-list, banned calls, dunder access, literal-relative `open()` only), runs the base interpreter with `-I -B`, cwd `workspace/scripts/`, secret-free env, timeout, output cap, Windows Job Object memory cap + one-process limit, kill-switch polling. Optional `scripts.sandbox: docker | windows_sandbox`; refuses if the chosen sandbox is missing.
+- Policy: `run_script` now **asks in Restricted** (prompt shows the script) and **counts down in Free** (new `free_countdown` flag). Before M5 it was registered as auto-allow in Restricted; `tests/test_policy.py` was updated to the stricter rule.
+- Agent: static check runs before the ask, so rejected scripts are never offered for approval. Events `script.saved` / `script.blocked`.
+- `config.yaml` `scripts:` section. README section with the "not a full sandbox" warning.
+
+### Tests
+- pytest **386 passed, 1 skipped** (49 new in `tests/test_script_runner.py`, real local subprocesses in a temp workspace). Electron **66 passed**.
+
+### Known gaps
+- Docker and Windows Sandbox paths are unit-tested only (command/config built); not run on this PC (needs hand test if you enable them).
+- Format-string attribute tricks (`"{0.__class__}".format(x)`) are not caught by the AST rules; this is why the README says it is not a sandbox.
+
+### NEXT STEP
+M6: screen control — `backend/tools/screen_control.py` (vision provider from config, one action at a time, DPI/multi-monitor, highlight, policy per action, 10-action cap, sensitive-window refusal, disabled on Ollama).
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
 - **M2B. Universal app launcher & adapters**: Done (AppIndex, safe lnk resolution, denylist, first-launch approvals, Spotify/WhatsApp adapters, planner architecture).
 - **M3. Messaging (WhatsApp adapter)**: Done (contacts resolution, phone masking, provenance guard, rate limits, foreground check, single send).
 - **M4. Browser tasks (Playwright)**: Done (headed mode, clean profile, IP safety, DNS rebinding defence, prompt injection guard, taint tracking, context hardening).
-- **M5. Self-written scripts**: Not started (next).
+- **M5. Self-written scripts**: Done (static checks, runtime limits, ask/countdown, optional Docker/Windows Sandbox).
 

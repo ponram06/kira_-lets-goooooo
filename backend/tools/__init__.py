@@ -17,6 +17,7 @@ from backend.tools.system_control import brightness, lock_pc, system_info, take_
 from backend.tools.reminders_tool import cancel_reminder, list_reminders, set_reminder, set_timer
 from backend.tools.app_launcher import media_control, open_any_app
 from backend.tools.whatsapp_tool import send_whatsapp
+from backend.tools.script_runner import run_script
 from backend.tools.browser_tools import (
     browser_back,
     browser_click,
@@ -52,6 +53,8 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "media_control": media_control,
     # M3 messaging
     "send_whatsapp": send_whatsapp,
+    # M5 self-written scripts
+    "run_script": run_script,
     # M4 browser tools
     "browser_open": browser_open,
     "browser_search": browser_search,
@@ -274,6 +277,14 @@ M4_TOOLS_SCHEMA: list[dict] = [
 ]
 
 KIRA_TOOLS_SCHEMA.extend(M2_TOOLS_SCHEMA)
+KIRA_TOOLS_SCHEMA.append(_fn(
+    "run_script",
+    "Write and run a short Python script (computation, text or file work inside workspace/scripts/). "
+    "Only safe standard-library modules are allowed; no os, subprocess, network or system access. "
+    "Prefer an adapter or built-in tool when one exists.",
+    {"code": {"type": "string", "description": "Complete Python source code"},
+     "name": {"type": "string", "description": "Short file name, letters/digits/_/- only"}},
+    ["code"]))
 KIRA_TOOLS_SCHEMA.extend(M4_TOOLS_SCHEMA)
 
 __all__ = [

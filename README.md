@@ -521,6 +521,17 @@ Kira provides safe, headed browser automation via Playwright Chromium:
 - **Context Hardening**: All permissions denied, service workers blocked, downloads cancelled, file choosers cancelled, dialogs auto-dismissed, extra tabs/popups closed immediately (1-tab cap).
 - **Kill Switch & Ollama Protection**: Checked prior to every browser action. Browser tools are disabled when running on the local Ollama model.
 
+### M5. Self-written Scripts (`run_script`)
+
+The model can write a short Python script; Kira saves it as `workspace/scripts/<name>_<id>.py` and runs it.
+
+- **Restricted mode** shows you the script and asks. **Free mode** runs it after the 3-second countdown (say "stop" to cancel).
+- **Static checks** (`backend/tools/script_runner.py`) reject the script before you are even asked if it imports anything outside a small standard-library allow-list (no `os`, `sys`, `subprocess`, `socket`, `ctypes`, `shutil`, `importlib`, `pathlib`, network modules), calls `eval`/`exec`/`compile`/`__import__`/`getattr`, touches dunder attributes, or calls `open()` with anything but a literal relative path.
+- **Runtime limits**: isolated `python -I` subprocess, working directory `workspace/scripts/`, an environment with no API keys or PIN, timeout, output cap and a memory cap with child processes blocked (Windows Job Object). The kill switch stops a running script. Limits live in `config.yaml` under `scripts:`.
+- **⚠ The static checks are NOT a full sandbox.** Python is dynamic and a determined script can get around AST rules. For code you do not trust set `scripts.sandbox` to `docker` (no network, memory cap, read-only mount; needs Docker Desktop) or `windows_sandbox` (needs the Windows Sandbox feature, Pro/Enterprise editions). If the chosen sandbox is missing, Kira refuses to run the script instead of running it unsandboxed.
+
+Test: `.venv\Scripts\python.exe -m pytest -q tests	est_script_runner.py`
+
 ### Avatar Chat Box (Fallback Input)
 
 When a microphone is unavailable or muted, or when you prefer typing:
