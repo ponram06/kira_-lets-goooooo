@@ -26,7 +26,7 @@ class WhatsAppAdapter(AppAdapter):
 
     name = "whatsapp"
     aliases = ["whatsapp desktop"]
-    actions = ["open"]
+    actions = ["open", "send_message"]
 
     def detect(self) -> bool:
         """Detect whether WhatsApp desktop or Store app is installed."""
@@ -40,12 +40,6 @@ class WhatsAppAdapter(AppAdapter):
         return not res_str.lower().startswith("error") and not res_str.lower().startswith("action blocked")
 
     def execute(self, action: str, **params: Any) -> AdapterResult:
-        if action == "send_message" or action == "message":
-            return AdapterResult(
-                success=False,
-                message="WhatsApp messaging is handled in Milestone 3 with safety read-back, contact resolution, and rate limits.",
-            )
-
         if action not in self.actions:
             return AdapterResult(
                 success=False,
@@ -58,6 +52,15 @@ class WhatsAppAdapter(AppAdapter):
                 success=ok,
                 message="WhatsApp opened successfully." if ok else "Failed opening WhatsApp.",
             )
+
+        if action == "send_message":
+            from backend.tools.whatsapp_tool import send_whatsapp
+            contact = params.get("contact", "")
+            text = params.get("text", "")
+            request_id = params.get("request_id")
+            res_str = send_whatsapp(contact=contact, text=text, request_id=request_id)
+            success = "I pressed Enter" in res_str
+            return AdapterResult(success=success, message=res_str)
 
         return AdapterResult(success=False, message=f"Unhandled action '{action}'.")
 

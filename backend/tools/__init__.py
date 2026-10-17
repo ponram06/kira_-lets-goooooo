@@ -16,6 +16,7 @@ from backend.tools.vscode_visible import open_in_vscode
 from backend.tools.system_control import brightness, lock_pc, system_info, take_screenshot, volume
 from backend.tools.reminders_tool import cancel_reminder, list_reminders, set_reminder, set_timer
 from backend.tools.app_launcher import media_control, open_any_app
+from backend.tools.whatsapp_tool import send_whatsapp
 
 # Mapping of tool name -> callable implementation
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -39,6 +40,8 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     # M2B universal launcher and adapters
     "open_any_app": open_any_app,
     "media_control": media_control,
+    # M3 messaging
+    "send_whatsapp": send_whatsapp,
 }
 
 
@@ -84,6 +87,10 @@ M2_TOOLS_SCHEMA: list[dict] = [
         {"action": {"type": "string", "enum": ["open", "play_pause", "next", "previous", "volume_up", "volume_down"], "description": "Media action to perform"},
          "app": {"type": "string", "description": "Target application name (default: 'spotify')"}},
         ["action"]),
+    _fn("send_whatsapp", "Send a WhatsApp message to an existing contact from contacts.yaml.",
+        {"contact": {"type": "string", "description": "Name of the contact from contacts.yaml (e.g. 'Meldan'). Phone numbers are not accepted."},
+         "text": {"type": "string", "description": "Exact message text to send (up to 280 characters). Must come from user request."}},
+        ["contact", "text"]),
 ]
 
 # OpenAI-compatible function schemas
@@ -237,6 +244,7 @@ __all__ = [
     "open_in_vscode",
     "open_any_app",
     "media_control",
+    "send_whatsapp",
     "TOOL_FUNCTIONS",
     "KIRA_TOOLS_SCHEMA",
 ]
