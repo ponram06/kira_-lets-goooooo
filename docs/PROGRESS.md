@@ -171,9 +171,61 @@ M4. Browser tasks (Playwright).
 
 ---
 
+## M4. Browser tasks (Playwright) — done (2026-10-17)
+
+### What was done
+- **Pinned Dependency & Profile Isolation**:
+  - Pinned `playwright==1.63.0` in `requirements.txt` (released 2026-09-15, >4 weeks old).
+  - Clean browser profile stored outside git in `%APPDATA%\Kira\browser_profile` (or `%KIRA_USER_DIR%\browser_profile` for test isolation). Completely isolated from user's personal Chrome/Edge profiles, cookies, saved passwords, or extensions.
+  - Headed visible Chromium window for real-time observation. Installed only Chromium to minimize disk and memory footprint.
+- **Strict URL & IP Safety Engine (`backend/browser/url_guard.py`)**:
+  - Enforces `https://` only (blocks `file://`, `chrome://`, `about:`, `data:`, `javascript:`, `blob:`, `whatsapp://`, and all other app protocols).
+  - Port strictly 443 only (rejects non-443 ports like 8080, 8443, 80).
+  - Blocks `user@host` authentication tricks, trailing-dot hosts, and internal domain suffixes (`.local`, `.internal`, `.localhost`, `.lan`, `.home`, `.corp`).
+  - Blocks IP literals in all forms (decimal, hex, octal, IPv4-mapped IPv6, standard notation).
+  - All IDN domains are converted to ASCII punycode (`xn--...`) in confirmation prompts and logs.
+  - Pre-DNS resolution blocks private RFC 1918 ranges, loopback, link-local (`169.254.169.254`), multicast, and reserved addresses.
+  - Route handler intercepts every request (main frame, subframes, resources).
+- **DNS Rebinding Defence (`check_server_address`)**:
+  - Inspects connected server IP from `response.server_addr()` after each response. If the IP is private, loopback, or link-local, closes the page immediately and halts the task.
+- **Content Sanitization & Prompt Injection Containment (`backend/browser/dom_reader.py`)**:
+  - Evaluates in-page DOM script extracting visible plain text. Removes `<script>`, `<style>`, `<noscript>`, `<svg>`, `<canvas>`, `<template>`, `<iframe`, and CSS-hidden elements (`display: none`, `visibility: hidden`, `opacity: 0`, `aria-hidden="true"`).
+  - Strips zero-width characters, BiDi overrides, Unicode tag characters, and invisible controls.
+  - Neutralizes closing tag lookalikes (`</UNTRUSTED_WEB_DATA>` $\to$ `&lt;/UNTRUSTED_WEB_DATA>`).
+  - Wraps extracted text in unique per-call random-delimited `<UNTRUSTED_WEB_DATA_{delim}>` tags (capped at 4,000 characters).
+  - System prompt and agent loop treat wrapped web content strictly as untrusted data, never as instructions.
+- **Interaction Guard & Hardened Typing/Clicks (`backend/browser/interaction_guard.py`)**:
+  - Detects and refuses typing into password, OTP/2FA, and payment/credit-card fields, instructing the user to type them manually.
+  - Scans typed text against `secrets_guard.known_secrets()` (blocks secrets from `.env` or contacts).
+  - Typing strictly uses Playwright's locator API (`locator.fill`), never presses Enter, and never uses OS-level typing.
+  - In Restricted mode, any click on a `<button>`, `<input type="submit">`, or element inside a `<form>` asks confirmation first reading back the domain (punycode) and button text. High-risk keywords (submit, buy, post, delete, log in) ask first as backstop in both modes.
+- **Taint Tracking & Provenance Guard**:
+  - Once `browser_read` executes, the task is marked tainted by web content.
+  - Subsequent `browser_open` calls to a new domain and all `browser_type` calls require explicit confirmation with fixed wording stating the action follows web content.
+  - M3 provenance guard treats `browser_read` outputs as prior tool outputs, catching attempts to forward read text to WhatsApp.
+- **Context Hardening & Restrictions**:
+  - All permissions denied, service workers blocked, `accept_downloads=False`, file choosers cancelled, dialogs auto-dismissed, extra tabs/popups closed immediately (1-tab limit).
+  - Browser tools fail closed when running on the local Ollama provider.
+  - Kill switch halts all browser actions immediately.
+  - Single browser instance closed cleanly on Kira shutdown via `atexit`.
+- **Policy & Adapter Integration**:
+  - Registered 8 browser tools in `TOOL_REGISTRY` (`RiskLevel.LOW`, zero other policy rules changed).
+  - Implemented `BrowserAdapter` in `backend/adapters/browser.py` and registered in `backend/adapters/__init__.py`.
+
+### Tests
+- Python: **328 passed, 1 skipped** (`.venv\Scripts\python.exe -m pytest -q`). 19 new tests in `tests/test_browser.py`.
+- Electron: **58 passed** (`cd avatar; npm test`).
+
+### Next milestone
+M5. Self-written scripts (run_script tool, workspace/scripts/ directory, static AST checks, sandbox options).
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
 - **M2B. Universal app launcher & adapters**: Done (AppIndex, safe lnk resolution, denylist, first-launch approvals, Spotify/WhatsApp adapters, planner architecture).
 - **M3. Messaging (WhatsApp adapter)**: Done (contacts resolution, phone masking, provenance guard, rate limits, foreground check, single send).
-- **M4. Browser tasks (Playwright)**: Not started (next).
+- **M4. Browser tasks (Playwright)**: Done (headed mode, clean profile, IP safety, DNS rebinding defence, prompt injection guard, taint tracking, context hardening).
+- **M5. Self-written scripts**: Not started (next).
+

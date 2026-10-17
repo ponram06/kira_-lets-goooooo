@@ -455,6 +455,14 @@ Kira includes local system controls, persistent timers/reminders, and a fallback
 | `open_any_app` | **LOW** | Ask first (first launch) | Ask first (first launch) | Universal launcher for Start Menu and Store apps. Resolves locally via `AppIndex`. Requires first-launch approval in both modes. |
 | `media_control` | **LOW** | Allow | Allow | Keyboard media control (`open`, `play_pause`, `next`, `previous`, `volume_up`, `volume_down`) for supported apps (Spotify). |
 | `send_whatsapp` | **HIGH** | Ask first | Countdown (3s) | WhatsApp messaging tool. Resolves contact name against `%APPDATA%\Kira\contacts.yaml` (never accepts phone numbers from model). Spoken read-back of contact name, masked number, and full message. Verifies WhatsApp foreground window before pressing Enter keystroke. Rates limited persistently. First send to contact in Free mode requires confirmation. |
+| `browser_open` | **LOW** | Allow | Allow | Opens an HTTPS website in the headed browser. Enforces port 443, checks private IP ranges, blocks non-HTTPS schemes, and intercepts redirects. Taint rule: opens to new domains after `browser_read` ask first. |
+| `browser_search` | **LOW** | Allow | Allow | Web search using fixed search engine template (`duckduckgo.com`). Query length capped and scanned for secrets. |
+| `browser_read` | **LOW** | Allow | Allow | Extracts visible page text, strips scripts, styles, hidden elements, and Unicode tags. Wraps output in random-delimited `<UNTRUSTED_WEB_DATA_{delim}>` block (max 4,000 chars). Sets task taint flag. |
+| `browser_click` | **LOW / HIGH** | Ask first (form/buttons) | Ask first (high-risk) | Clicks an element by visible text or role. In Restricted mode, any button, submit input, or form element asks first with domain (punycode) and button text. High-risk keywords (submit, buy, post, delete, log in) ask first in both modes. |
+| `browser_type` | **LOW** | Allow | Allow | Types text into input fields by label or placeholder using Playwright locator (never presses Enter, no OS typing). Strictly refuses password, OTP, and payment fields. Taint rule: all typing asks first after `browser_read`. |
+| `browser_scroll` | **LOW** | Allow | Allow | Scrolls the active page viewport up or down by pixel amount. |
+| `browser_back` | **LOW** | Allow | Allow | Navigates back in browser history. |
+| `browser_close` | **LOW** | Allow | Allow | Closes active browser page and context cleanly. |
 
 ### M2B. Universal App Launcher, Adapters & Any-Task Planner
 
@@ -500,6 +508,18 @@ Kira includes local system controls, persistent timers/reminders, and a fallback
   - Opens `whatsapp://send` URI scheme (blocked in all other tools).
   - Verifies foreground window via `ctypes` (`GetForegroundWindow`, `GetWindowThreadProcessId`) matches WhatsApp process names (`whatsapp.exe`, `whatsappdesktop.exe`). Aborts without pressing Enter if not focused or if error dialog is shown.
   - Sends `VK_RETURN` via `keybd_event`. Default honest report: `"I pressed Enter. I can't verify delivery, check WhatsApp."`.
+
+### M4. Browser Tasks with Playwright (Headed Mode)
+
+Kira provides safe, headed browser automation via Playwright Chromium:
+- **Clean Profile Isolation**: Uses a dedicated browser profile in `%APPDATA%\Kira\browser_profile` (never touches personal Chrome/Edge profiles, cookies, saved passwords, or extensions). Runs in visible headed mode for real-time observation.
+- **Strict URL & IP Safety**: Strictly `https://` only; port 443 only; blocks `file://`, `chrome://`, `about:`, `data:`, `javascript:`, and all app protocols (`whatsapp://`, etc.). Blocks loopback, RFC 1918 private IPs, link-local IPs (`169.254.169.254`), decimal/hex/octal IP literals, and trailing dots. All IDN hostnames are displayed in punycode (`xn--...`).
+- **DNS Rebinding Defence**: Response server address (`response.server_addr()`) is verified after each response; if connected IP is private, loopback, or link-local, the page is closed immediately and the task halted.
+- **Prompt Injection & Untrusted Data Wrapper**: In-page text is cleaned of scripts, styles, hidden elements, zero-width spaces, BiDi overrides, and Unicode tags. Wrapped in a random-delimited `<UNTRUSTED_WEB_DATA_{delim}>` block with neutralized closing tags (max 4,000 chars). Injected prompt instructions are treated strictly as untrusted data.
+- **Taint Tracking**: After `browser_read` returns web content in a task, navigating to a new domain or typing into any field requires explicit confirmation reading back the domain or field.
+- **Typing & Click Hardening**: Password, OTP, and payment fields (credit card, CVV, expiry) are detected and refused, instructing the user to complete them manually. Normal typing never presses Enter or submits. In Restricted mode, any click on a button, submit input, or form element asks confirmation first reading back the domain and exact button text.
+- **Context Hardening**: All permissions denied, service workers blocked, downloads cancelled, file choosers cancelled, dialogs auto-dismissed, extra tabs/popups closed immediately (1-tab cap).
+- **Kill Switch & Ollama Protection**: Checked prior to every browser action. Browser tools are disabled when running on the local Ollama model.
 
 ### Avatar Chat Box (Fallback Input)
 
