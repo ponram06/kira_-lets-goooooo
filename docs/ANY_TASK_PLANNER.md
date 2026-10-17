@@ -102,3 +102,4 @@ For every user task, Kira evaluates potential execution paths in strict top-down
 ### 7. Per-Step Verification & Honest Stuck Reporting
 - The planner verifies the concrete outcome of every step (checking window titles, process existence, return codes, or output files).
 - If an action fails or the assistant gets stuck, it reports **honestly** what was tried, where it failed, and what options remain. It **never pretends** an action succeeded when verification failed.
+

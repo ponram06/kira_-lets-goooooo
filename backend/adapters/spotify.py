@@ -120,3 +120,4 @@ class SpotifyAdapter(AppAdapter):
             return AdapterResult(success=True, message="volume down sent")
 
         return AdapterResult(success=False, message=f"Unhandled action '{action}'.")
+

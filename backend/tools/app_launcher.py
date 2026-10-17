@@ -247,3 +247,4 @@ def media_control(action: str, app: str = "spotify") -> str:
     if not res.success:
         return f"Error: {res.message}"
     return res.message
+

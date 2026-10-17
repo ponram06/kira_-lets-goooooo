@@ -266,3 +266,4 @@ def check_denylist(
             return True, f"Executable '{p.name}' appears to be an installer/uninstaller and is denylisted."
 
     return False, ""
+

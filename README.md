@@ -452,6 +452,31 @@ Kira includes local system controls, persistent timers/reminders, and a fallback
 | `set_reminder` | **LOW** | Allow | Allow | Persistent reminder scheduled at a local time (`HH:MM` or `YYYY-MM-DD HH:MM`). Survives assistant restarts. |
 | `list_reminders` | **LOW** | Allow | Allow | Lists active timers and reminders with their IDs. |
 | `cancel_reminder` | **LOW** | Allow | Allow | Cancels a pending timer or reminder by ID. |
+| `open_any_app` | **LOW** | Ask first (first launch) | Ask first (first launch) | Universal launcher for Start Menu and Store apps. Resolves locally via `AppIndex`. Requires first-launch approval in both modes. |
+| `media_control` | **LOW** | Allow | Allow | Keyboard media control (`open`, `play_pause`, `next`, `previous`, `volume_up`, `volume_down`) for supported apps (Spotify). |
+
+### M2B. Universal App Launcher, Adapters & Any-Task Planner
+
+- **Universal App Indexer (`backend/app_index.py`)**:
+  - Scans user and system Start Menu `.lnk` shortcuts and Store apps (`Get-StartApps`).
+  - Read-only, 100% local resolution. Full app list is never sent to cloud models or dumped into logs.
+  - Fuzzy matching with ambiguity detection (asks one candidate at a time with yes/no; never guesses).
+- **Shortcut & Denylist Security (`backend/app_security.py`)**:
+  - Extracts target path, arguments, and `SLDF_RUNAS_USER` run-as administrator flag.
+  - Refuses scripts (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`, etc.) and script interpreters (`mshta`, `wscript`, `cscript`, `rundll32`).
+  - Blocks executables requiring administrator elevation to prevent UAC prompts.
+  - Whole-word security denylist blocks command interpreters (`cmd`, `powershell`, `pwsh`, `wt`, `bash`, `wsl`), system consoles (`regedit`, `mmc`, `diskpart`), and installer/uninstaller binaries.
+- **First-Launch Approval (`backend/app_approvals.py`)**:
+  - Requires user approval on first launch in **both** Restricted and Free modes.
+  - Remembers target path, arguments, and SHA-256 in `%APPDATA%\Kira\app_approvals.json` (outside git). If the binary changes, approval is re-requested.
+  - Approval cannot be written via `user_text` or filesystem tools.
+- **App Adapters (`backend/adapters/`)**:
+  - Fixed action lists with parameter validation.
+  - `spotify`: Desktop launch and virtual media keys (`play_pause`, `next`, `previous`, `volume_up`, `volume_down`). Confirms process is running first and reports `"play/pause sent"`.
+  - `whatsapp`: Desktop opener only; messaging deferred to Milestone 3.
+- **Any-Task Planner Specification (`docs/ANY_TASK_PLANNER.md`)**:
+  - 5-stage fallback hierarchy: Adapter $\to$ Built-in Tool $\to$ Browser (M4) $\to$ Script (M5) $\to$ Screen Control (M6).
+  - 15-step task limit, zero policy lowering, screen control disabled on Ollama, zero password typing, read content is data.
 
 ### Avatar Chat Box (Fallback Input)
 

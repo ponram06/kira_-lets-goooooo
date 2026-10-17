@@ -60,3 +60,4 @@ class WhatsAppAdapter(AppAdapter):
             )
 
         return AdapterResult(success=False, message=f"Unhandled action '{action}'.")
+

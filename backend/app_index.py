@@ -339,3 +339,4 @@ class AppIndex:
 
 # Global singleton index
 APP_INDEX = AppIndex()
+

@@ -85,9 +85,57 @@ M2B. Universal app launcher, app adapters and the any-task planner.
 
 ---
 
+## M2B. Universal app launcher, app adapters and the any-task planner — done (2026-10-17)
+
+### What was done
+- **Any-Task Planner Specification** (`docs/ANY_TASK_PLANNER.md`):
+  - Strict 5-tier fallback hierarchy: (1) App Adapter -> (2) Built-in Tool -> (3) Browser Automation (M4) -> (4) Sandboxed Script (M5) -> (5) Screen Control (M6).
+  - Explicit architectural constraints: planner never lowers a policy decision; 15-step task limit then pause and ask; screen control strictly disabled on Ollama provider; zero typing of passwords, PINs, OTPs, or payment details; external content treated as untrusted data; spoken narration before each step; per-step verification and honest stuck state reporting. Screen control is documented only and not wired in M2B.
+- **Read-Only Universal App Indexer** (`backend/app_index.py`):
+  - Recursively scans Start Menu shortcuts (`.lnk`) from user AppData and system ProgramData.
+  - Queries Windows Store / UWP apps off the event loop via `Get-StartApps` with a 15-second timeout.
+  - Deduplicates user and system shortcuts by normalized target path and Store AppIDs.
+  - Keeps previous cache on refresh failures. Refreshes once and retries before declaring an app not found.
+  - Strict privacy: resolution happens 100% locally; the index is never sent to cloud models and is never logged in full (only counts).
+- **Fuzzy Resolution & Ambiguity Safety**:
+  - Exact match, alias match, and token-similarity matching via `difflib.SequenceMatcher`.
+  - Confident matches read back name and launch.
+  - Ambiguous matches (two close candidates) ask the user one candidate at a time with yes/no (never guessing).
+  - Weak matches (< 0.60) offer at most 3 closest candidate suggestions and never guess an executable path.
+- **Shortcut Security & Denylist Engine** (`backend/app_security.py`):
+  - Resolves `.lnk` files via COM `IShellLink` / `IShellLinkDataList` extracting target path, arguments, and `SLDF_RUNAS_USER` flag.
+  - Refuses scripts (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`, etc.) and script interpreters (`mshta`, `wscript`, `cscript`, `rundll32`, `regsvr32`).
+  - Refuses administrator elevation: if the Run As Administrator flag is set, launch is blocked to prevent UAC prompts.
+  - Whole-word security denylist blocks command interpreters (`cmd`, `powershell`, `pwsh`, `wt`, `bash`, `wsl`), system editors (`regedit`, `mmc`, `diskpart`, `diskmgmt`), installer/uninstaller binaries (`setup`, `unins000`, `installer`), and display-name phrases ("Windows PowerShell", "Command Prompt", "Windows Terminal", "Registry Editor", "Disk Management") in both Restricted and Free modes.
+- **First-Launch Approval & Tamper Detection** (`backend/app_approvals.py`):
+  - Stored outside the repository in `%APPDATA%\Kira\app_approvals.json` (atomic write via tempfile/replace).
+  - Keyed by resolved target path and arguments, recording size, modified time, and SHA-256 checksum at approval time.
+  - Store apps keyed by validated AppID (strictly checked against invalid shell/traversal characters).
+  - Re-checks path, size, mtime, and SHA-256 on every launch; if the target binary is changed or planted, approval is revoked and re-asked.
+  - Never writable via `user_text` or LLM filesystem tools; writable only through confirmed authorization flow.
+- **Policy Integration** (`backend/policy.py` & `backend/agent.py`):
+  - `policy.check()` accepts an additive `approved` flag. Unapproved applications return `"ask"` in BOTH Restricted and Free modes.
+  - Registered `open_any_app` (LOW risk, `requires_approval=True`) and `media_control` (LOW risk) in `TOOL_REGISTRY`.
+- **App Adapters** (`backend/adapters/`):
+  - Base interface `AppAdapter` with fixed action lists, parameter validation, and detection.
+  - `generic`: General desktop/Store app launcher via `AppIndex`.
+  - `spotify`: Desktop app launch and keyboard media keys (`play_pause`, `next`, `previous`, `volume_up`, `volume_down`) using virtual key codes (`keybd_event`). Verifies `Spotify.exe` is running first and reports `"play/pause sent"` (not guessing player state). No `spotify:search:` links used.
+  - `whatsapp`: Desktop/Store app opener only; messaging actions explicitly rejected/deferred to Milestone 3. Does not register `whatsapp://` URL protocols.
+- **Window & Process Verification**:
+  - Polls for active window or running process with timeout. Confirms with `"Opened {name}."` or reports `"Command was sent to open {name}, but the window could not be confirmed."`.
+
+### Tests
+- Python: **286 passed, 1 skipped** (`.venv\Scripts\python.exe -m pytest -q`). 16 new tests in `tests/test_app_launcher.py`.
+- Electron: **58 passed** (`cd avatar; npm test`).
+
+### Next milestone
+M3. Messaging (WhatsApp adapter with contact fuzzy resolution, ask-first confirmation, rate limiting, and foreground window verification).
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
-- **M2B. Universal app launcher & adapters**: Not started (next).
-- **M3. Messaging (WhatsApp adapter)**: Not started.
+- **M2B. Universal app launcher & adapters**: Done (AppIndex, safe lnk resolution, denylist, first-launch approvals, Spotify/WhatsApp adapters, planner architecture).
+- **M3. Messaging (WhatsApp adapter)**: Not started (next).
 - **M4. Browser tasks (Playwright)**: Not started.

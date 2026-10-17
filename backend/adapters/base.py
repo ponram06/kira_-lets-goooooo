@@ -47,3 +47,4 @@ class AppAdapter(ABC):
     def verify(self, action: str, result: AdapterResult) -> bool:
         """Verify the action completed successfully."""
         return result.success
+

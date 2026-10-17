@@ -53,3 +53,4 @@ class GenericAppAdapter(AppAdapter):
         result = open_any_app(app_name)
         success = not result.lower().startswith("error") and not result.lower().startswith("action blocked")
         return AdapterResult(success=success, message=result)
+

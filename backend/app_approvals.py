@@ -204,3 +204,4 @@ def save_approval(
                 pass
             logger.error("Failed saving approval record: %s", exc)
             return False
+
