@@ -117,10 +117,7 @@ class SpriteRenderer {
     const isErrorFlash = timestamp < this.errorFlashUntil || this.state === 'error';
     const isOffline = this.state === 'offline';
 
-    // 1. Draw mode indicator ring at bottom right of the canvas
-    this._drawModeIndicator(ctx, w - 24, h - 24, 8);
-
-    // 2. Compute animation transforms
+    // 1. Compute animation transforms
     let scaleX = 1.0;
     let scaleY = 1.0;
     let offsetX = 0.0;
@@ -215,6 +212,29 @@ class SpriteRenderer {
 
     ctx.restore();
 
+    // 3. Dynamic Apple Tint: Green in Restricted mode, natural Red in Free mode
+    if (this.mode === 'restricted' && !isOffline) {
+      const ax = this.glowConfig.apple.x + offsetX;
+      const ay = this.glowConfig.apple.y + offsetY;
+      const ar = (this.glowConfig.apple.radius || 18) * 1.15;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(ax, ay, ar, 0, Math.PI * 2);
+      ctx.clip();
+
+      // Transform red pixels to emerald green while preserving shading, specular highlights, and hand contours
+      ctx.globalCompositeOperation = 'hue';
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(ax - ar, ay - ar, ar * 2, ar * 2);
+
+      ctx.globalCompositeOperation = 'color';
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+      ctx.fillRect(ax - ar, ay - ar, ar * 2, ar * 2);
+
+      ctx.restore();
+    }
+
     // 4. Draw Glow Overlays (Eye and Apple radial gradients)
     if (!isOffline) {
       this._drawRadialGlow(
@@ -225,12 +245,16 @@ class SpriteRenderer {
         this.glowConfig.eye.color
       );
 
+      const appleGlowColor = this.mode === 'free'
+        ? (this.glowConfig.apple.color || 'rgba(255, 30, 30, 0.85)')
+        : (this.glowConfig.apple.restricted_color || 'rgba(34, 197, 94, 0.85)');
+
       this._drawRadialGlow(
         ctx,
         this.glowConfig.apple.x + offsetX,
         this.glowConfig.apple.y + offsetY,
         this.glowConfig.apple.radius * appleGlow,
-        this.glowConfig.apple.color
+        appleGlowColor
       );
     }
   }
@@ -281,30 +305,12 @@ class SpriteRenderer {
     ctx.arc(cx + 9, cy - 47, 4, 0, Math.PI * 2);
     ctx.fill();
 
-    // Apple in hands
-    ctx.fillStyle = '#dc2626';
+    // Apple in hands: Green in Restricted mode, Red in Free mode
+    ctx.fillStyle = this.mode === 'free' ? '#dc2626' : '#16a34a';
     ctx.beginPath();
     ctx.arc(cx, cy + 70, 18, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.restore();
-  }
-
-  _drawModeIndicator(ctx, x, y, radius) {
-    ctx.save();
-    // Blue for Restricted mode, Red for Free mode
-    const color = this.mode === 'free' ? '#ef4444' : '#3b82f6';
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 6;
-    ctx.fill();
-
-    // Subtle dark border
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#1e293b';
-    ctx.stroke();
     ctx.restore();
   }
 

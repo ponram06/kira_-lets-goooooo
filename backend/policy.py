@@ -280,12 +280,14 @@ class ModeManager:
         self,
         free_timeout: int = 600,
         confirm_callback: Optional[Callable[[], bool]] = None,
+        pin: str = "1684",
     ) -> None:
         self._mode: Mode = Mode.RESTRICTED
         self._free_timeout: int = free_timeout
         self._confirm_callback: Callable[[], bool] = (
             confirm_callback or self._terminal_confirm
         )
+        self.pin: str = str(pin).strip()
         self._revert_timer: Optional[threading.Timer] = None
         self._lock = threading.Lock()
         self._screen_control_disabled: bool = False
@@ -303,16 +305,23 @@ class ModeManager:
 
     # ── public methods ───────────────────────────────────────────────────────
 
-    def enter_free(self) -> bool:
+    def enter_free(self, pin: Optional[str] = None) -> bool:
         """
-        Attempt to switch to Free mode.  Calls the confirm callback.
+        Attempt to switch to Free mode.
+        If *pin* is provided, checks against self.pin. Otherwise invokes confirm callback.
 
         Returns ``True`` if Free mode was entered, ``False`` if denied.
         """
         with self._lock:
-            if not self._confirm_callback():
-                logger.info("Free mode: user declined confirmation.")
-                return False
+            if pin is not None:
+                if str(pin).strip() != self.pin:
+                    logger.info("Free mode: incorrect PIN '%s'", pin)
+                    return False
+            else:
+                if not self._confirm_callback():
+                    logger.info("Free mode: user declined confirmation.")
+                    return False
+
             self._mode = Mode.FREE
             self._screen_control_disabled = False   # re-enable on deliberate entry
             self._restart_revert_timer()

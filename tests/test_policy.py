@@ -604,3 +604,37 @@ def test_persona_confirmation_wording_fixed_and_independent():
         assert check("make_payment", Mode.RESTRICTED) == "block"
         assert check("make_payment", Mode.FREE) == "block"
 
+
+# ---------------------------------------------------------------------------
+# ModeManager PIN Tests
+# ---------------------------------------------------------------------------
+
+
+def test_mode_manager_enter_free_with_correct_pin():
+    mm = ModeManager(pin="1684")
+    assert mm.enter_free(pin="1684") is True
+    assert mm.mode == Mode.FREE
+
+
+def test_mode_manager_enter_free_with_wrong_pin():
+    mm = ModeManager(pin="1684")
+    assert mm.enter_free(pin="9999") is False
+    assert mm.mode == Mode.RESTRICTED
+
+
+def test_mode_manager_enter_free_pin_strips_whitespace():
+    mm = ModeManager(pin="1684")
+    assert mm.enter_free(pin=" 1684 \n") is True
+    assert mm.mode == Mode.FREE
+
+
+def test_extract_pin_digits_variations():
+    from backend.brain import extract_pin_digits
+
+    assert extract_pin_digits("1684") == "1684"
+    assert extract_pin_digits("PIN: 1684") == "1684"
+    assert extract_pin_digits("1 6 8 4") == "1684"
+    assert extract_pin_digits("one six eight four") == "1684"
+    assert extract_pin_digits("sixteen eighty-four") == "1684"
+    assert extract_pin_digits("") == ""
+

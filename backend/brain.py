@@ -35,9 +35,44 @@ from backend.policy import KILL_SWITCH, ModeManager
 from backend.providers import ProviderManager
 from backend.server import WebSocketServer
 from backend.tools.voice_stub import register_voice_manager
-from backend.voice import VoiceManager, shared_confirm
+from backend.voice import VoiceManager, async_shared_confirm, shared_confirm
 
 _DEFAULT_CONFIG = Path(__file__).parent.parent / "config.yaml"
+
+# Spoken number word mapping for PIN entry
+_PIN_NUMBER_WORDS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+    "sixteen": "16", "eighty": "80", "four": "4", "eighty-four": "84",
+}
+
+
+def extract_pin_digits(text: str) -> str:
+    """Extract digits from typed or spoken PIN string."""
+    if not text:
+        return ""
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits:
+        return digits
+    normalized = text.lower().strip()
+    compounds = {
+        "sixteen eighty-four": "1684",
+        "sixteen eighty four": "1684",
+        "eighty-four": "84",
+        "eighty four": "84",
+        "sixteen": "16",
+    }
+    for phrase, num_str in compounds.items():
+        if phrase in normalized:
+            normalized = normalized.replace(phrase, num_str)
+
+    digits = "".join(ch for ch in normalized if ch.isdigit())
+    if digits:
+        return digits
+
+    words = normalized.replace("-", " ").split()
+    converted = "".join(_PIN_NUMBER_WORDS.get(w, "") for w in words)
+    return converted or text.strip()
 
 # Only show WARNING+ from the library; lower levels are noisy in the terminal
 logging.basicConfig(
@@ -70,18 +105,27 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
         system_prompt = persona.get("system_prompt", "You are a helpful assistant.")
     memory_limit: int = cfg.get("memory_limit", 20)
     free_timeout: int = cfg.get("mode", {}).get("free_revert_timeout", 600)
+    free_mode_pin: str = str(cfg.get("mode", {}).get("free_mode_pin", "1684")).strip()
     confirm_timeout: float = float(cfg.get("voice", {}).get("safety", {}).get("confirmation_timeout", 10.0))
 
     manager = ProviderManager(config_path)
-    mode_manager = ModeManager(free_timeout=free_timeout)
+    mode_manager = ModeManager(free_timeout=free_timeout, pin=free_mode_pin)
 
     # Initialize Voice Manager
     voice_manager = VoiceManager(cfg, mode_manager=mode_manager)
     register_voice_manager(voice_manager)
 
-    # Confirmation callback for agent using shared_confirm
-    def confirm_cb(prompt_text: str) -> bool:
-        return shared_confirm(prompt_text, voice_manager=voice_manager, timeout_seconds=confirm_timeout)
+    # Unified input queue for typed and spoken utterances
+    user_queue: asyncio.Queue[tuple[str, str, Optional[float]]] = asyncio.Queue()
+
+    # Non-blocking async confirmation callback using async_shared_confirm
+    async def confirm_cb(prompt_text: str) -> bool:
+        return await async_shared_confirm(
+            prompt_text,
+            voice_manager=voice_manager,
+            timeout_seconds=confirm_timeout,
+            user_queue=user_queue,
+        )
 
     agent = AgentRunner(
         provider_manager=manager,
@@ -115,9 +159,6 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
 
     loop = asyncio.get_running_loop()
     voice_manager.start_hotkey_listener(loop)
-
-    # Unified input queue for typed and spoken utterances
-    user_queue: asyncio.Queue[tuple[str, str, Optional[float]]] = asyncio.Queue()
 
     async def on_voice_utterance(utterance: str, speech_end_time: float) -> None:
         await user_queue.put(("voice", utterance, speech_end_time))
@@ -163,21 +204,39 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG) -> None:
                 break
 
             # Fast mode & kill-switch command handling
-            if lower_input == "restricted mode":
+            if lower_input in (
+                "restricted mode", "restricted", "go to restricted mode",
+                "switch to restricted mode", "got to restricted mode"
+            ):
                 mode_manager.enter_restricted()
                 print(f"[{persona_name}]: Switched to RESTRICTED mode.")
                 await voice_manager.speak("Switched to Restricted mode.")
                 continue
-            elif lower_input == "free mode":
-                if source == "voice":
-                    msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
-                    print(f"[{persona_name}]: {msg}")
-                    await voice_manager.speak(msg)
+            elif lower_input in (
+                "free mode", "free", "go to free mode",
+                "switch to free mode", "got to free mode"
+            ):
+                pin_prompt = "Enter PIN to enable Free mode (or type/say 'cancel'): "
+                print(f"\n[{persona_name}]: {pin_prompt}", end="", flush=True)
+                await voice_manager.speak("Please enter the PIN to enable Free mode.")
+
+                # Await user PIN response (typed in terminal or spoken via Push-to-Talk)
+                pin_source, pin_input, pin_speech_end = await user_queue.get()
+                if not pin_input or pin_input.strip().lower() in ("cancel", "no", "exit", "quit"):
+                    cancel_msg = "Free mode cancelled. Remaining in Restricted mode."
+                    print(f"\n[{persona_name}]: {cancel_msg}")
+                    await voice_manager.speak(cancel_msg)
                     continue
-                if mode_manager.enter_free():
-                    print(f"[{persona_name}]: Switched to FREE mode (auto-revert in {free_timeout}s).")
+
+                clean_pin = extract_pin_digits(pin_input)
+                if mode_manager.enter_free(pin=clean_pin):
+                    ok_msg = f"PIN verified. Switched to FREE mode (auto-revert in {free_timeout}s)."
+                    print(f"\n[{persona_name}]: {ok_msg}")
+                    await voice_manager.speak("PIN verified. Switched to Free mode.")
                 else:
-                    print(f"[{persona_name}]: Free mode declined. Remaining in Restricted mode.")
+                    fail_msg = f"Incorrect PIN ('{pin_input}'). Remaining in Restricted mode."
+                    print(f"\n[{persona_name}]: {fail_msg}")
+                    await voice_manager.speak("Incorrect PIN. Remaining in Restricted mode.")
                 continue
             elif lower_input == "stop":
                 KILL_SWITCH.stop()

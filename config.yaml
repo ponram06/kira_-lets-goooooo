@@ -75,6 +75,8 @@ persona:
 mode:
   # Seconds before Free mode auto-reverts to Restricted (default 10 minutes)
   free_revert_timeout: 600
+  # PIN required to unlock Free mode
+  free_mode_pin: "1684"
 
 # =============================================================================
 # Tool allow-lists

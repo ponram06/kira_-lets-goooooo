@@ -18,7 +18,8 @@
       "x": 201,
       "y": 115,
       "radius": 18,
-      "color": "rgba(255, 30, 30, 0.85)"
+      "color": "rgba(255, 30, 30, 0.85)",
+      "restricted_color": "rgba(34, 197, 94, 0.85)"
     }
   },
   "character": {

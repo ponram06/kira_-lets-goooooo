@@ -1014,15 +1014,19 @@ class VoiceManager:
                 print(f"[Kira]: {stop_msg}", flush=True)
                 return None
 
-            # 2. Free mode forbidden by voice
-            if norm == "free mode":
-                free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
-                print(f"[Kira]: {free_msg}", flush=True)
-                await self.speak(free_msg)
-                return None
+            # 2. Free mode command handling
+            if norm in ("free mode", "go to free mode", "switch to free mode", "got to free mode"):
+                if self.on_utterance:
+                    await self.on_utterance(utterance, speech_end_time)
+                    return utterance
+                else:
+                    free_msg = "Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."
+                    print(f"[Kira]: {free_msg}", flush=True)
+                    await self.speak(free_msg)
+                    return None
 
             # 3. Restricted mode allowed by voice
-            if norm == "restricted mode":
+            if norm in ("restricted mode", "go to restricted mode", "switch to restricted mode", "got to restricted mode"):
                 if self.mode_manager:
                     self.mode_manager.enter_restricted()
                 restr_msg = "Switched to Restricted mode."
@@ -1100,15 +1104,19 @@ def shared_confirm(
     read_back = f"Confirmation required. {prompt_text}. Do you approve? Say or type yes to proceed."
     if voice_manager and not voice_manager.is_muted_voice:
         try:
-            # Run TTS synchronously until finish so timer starts strictly AFTER playback
-            asyncio.run(voice_manager.speak(read_back))
-        except RuntimeError:
-            # If an event loop is already running in this thread, schedule it
             try:
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(voice_manager.speak(read_back))
-            except Exception as exc:
-                logger.debug("Read-back TTS error: %s", exc)
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(voice_manager.speak(read_back), loop)
+                try:
+                    fut.result(timeout=5.0)
+                except Exception as exc:
+                    logger.debug("Read-back TTS error: %s", exc)
+            else:
+                asyncio.run(voice_manager.speak(read_back))
         except Exception as exc:
             logger.debug("Read-back TTS error: %s", exc)
 
@@ -1137,7 +1145,7 @@ def shared_confirm(
     # 3. Spawn stdin reader thread
     def _terminal_input_worker() -> None:
         try:
-            ans = input(f"\n[Policy Confirmation] {prompt_text} (yes/no, 10s timeout): ").strip()
+            ans = input(f"\n[Policy Confirmation] {prompt_text} (yes/no, {timeout_seconds:.0f}s timeout): ").strip()
             result_queue.put(("typed", ans))
         except Exception:
             pass
@@ -1160,6 +1168,100 @@ def shared_confirm(
     except queue.Empty:
         print(f"\n[Kira]: Confirmation timed out ({timeout_seconds:.0f}s). No answer means no.\n")
         approved = False
+    finally:
+        with _active_confirm_lock:
+            _active_confirm_question_id = None
+            _active_confirm_queue = None
+        if voice_manager:
+            voice_manager.on_utterance = previous_callback
+
+    return approved
+
+
+async def async_shared_confirm(
+    prompt_text: str,
+    voice_manager: Optional[VoiceManager] = None,
+    timeout_seconds: float = 10.0,
+    user_queue: Optional[asyncio.Queue] = None,
+) -> bool:
+    """
+    Non-blocking async confirmation gate for running within the REPL asyncio loop.
+    Awaits read-back TTS cleanly, listens to the unified user_queue and external WebSocket,
+    and returns True on 'yes'/'y' or False on 'no'/timeout.
+    """
+    global _active_confirm_question_id, _active_confirm_queue
+    question_id = uuid.uuid4().hex[:8]
+
+    # 1. Read-back narration (TTS) before starting timer
+    read_back = f"Confirmation required. {prompt_text}. Do you approve? Say or type yes to proceed."
+    if voice_manager and not voice_manager.is_muted_voice:
+        try:
+            await voice_manager.speak(read_back)
+        except Exception as exc:
+            logger.debug("Read-back TTS error: %s", exc)
+
+    result_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+
+    with _active_confirm_lock:
+        _active_confirm_question_id = question_id
+        _active_confirm_queue = result_queue
+
+    # Publish policy.ask event for WebSocket clients and logs
+    _events.publish(
+        "policy.ask",
+        f"Confirmation required: {prompt_text}",
+        {"question_id": question_id, "prompt": prompt_text},
+    )
+
+    print(f"\n[Policy Confirmation] {prompt_text} (yes/no, {timeout_seconds:.0f}s timeout): ", flush=True)
+
+    previous_callback = voice_manager.on_utterance if voice_manager else None
+
+    async def _voice_confirm_hook(utterance: str, speech_end_time: float) -> None:
+        result_queue.put(("voice", utterance))
+
+    if voice_manager:
+        voice_manager.on_utterance = _voice_confirm_hook
+
+    approved = False
+    start_time = time.monotonic()
+
+    try:
+        while (time.monotonic() - start_time) < timeout_seconds:
+            # 1. Check external (WebSocket) response queue
+            try:
+                source, answer = result_queue.get_nowait()
+                norm = normalize_utterance(answer)
+                if norm in ("yes", "y"):
+                    approved = True
+                    logger.info("Confirmation granted via %s: '%s'", source, answer)
+                else:
+                    approved = False
+                    logger.info("Confirmation declined via %s: '%s'", source, answer)
+                break
+            except queue.Empty:
+                pass
+
+            # 2. Check unified user_queue (handles typed input and push-to-talk voice)
+            if user_queue:
+                try:
+                    source, answer, _ = user_queue.get_nowait()
+                    norm = normalize_utterance(answer)
+                    if norm in ("yes", "y"):
+                        approved = True
+                        logger.info("Confirmation granted via %s: '%s'", source, answer)
+                    else:
+                        approved = False
+                        logger.info("Confirmation declined via %s: '%s'", source, answer)
+                    break
+                except asyncio.QueueEmpty:
+                    pass
+
+            await asyncio.sleep(0.05)
+        else:
+            print(f"\n[Kira]: Confirmation timed out ({timeout_seconds:.0f}s). No answer means no.\n", flush=True)
+            approved = False
+
     finally:
         with _active_confirm_lock:
             _active_confirm_question_id = None
