@@ -392,8 +392,14 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 - Integrated log rotation into `backend/audit.py` (`log_action`) and `backend/events.py` (`_write_log`) prior to append. Handled `OSError` fail-safes so application logging is never disrupted.
 - Added 3 unit tests in `tests/test_log_rotation.py` (all passed).
 
+### Sub-step M10.b: Setup Script, Requirements Lock & Clean Venv Test — done (2026-10-17)
+- Generated `requirements.lock` with fully pinned dependencies for Python 3.14 on Windows.
+- Created `scripts/setup.bat` automating virtual environment creation, package installation, Playwright Chromium installation, Node.js avatar dependencies, initial `.env` setup, and `backend.doctor` probe.
+- Executed clean virtual environment test in an isolated temporary directory: verified clean installation of all requirements, verified critical imports (`backend.paths`, `backend.policy`, `backend.agent`), and verified clean teardown.
+
 ### NEXT STEP
-M10.b: scripts/setup.bat, pinned requirements.lock, and clean-virtualenv install test.
+M10.c: electron-builder configuration (portable/unpacked build) pointing at the backend.
+
 
 
 
