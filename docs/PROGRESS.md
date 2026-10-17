@@ -221,6 +221,46 @@ M5. Self-written scripts (run_script tool, workspace/scripts/ directory, static 
 
 ---
 
+## Phase 0. Independent verification of M1–M4 (Claude Code, 2026-10-17)
+
+M1–M4 were built by another assistant. Re-verified from scratch; earlier notes above were not trusted.
+
+### Real results (before Phase 0 fixes)
+- `git status`: clean except an uncommitted `.env.example` that contained a real PIN value (restored to the committed blank version; never committed).
+- pytest: **328 passed, 1 skipped** (66.8 s). Electron: **58 passed**.
+- `python -m backend.doctor`: **FAIL** on "Logs: a key or PIN appears in actions.jsonl, events.jsonl". Cause: the 4‑digit PIN matched digits inside timestamps (no standalone PIN in logs). Fixed (see below). Ollama: warn (not running).
+
+### Honest status per milestone
+| Milestone | Status | Notes |
+|---|---|---|
+| M1 App controls | tested with mocks + needs hand test | Tray, menus, dialogs, hotkeys, multi-monitor need a screen. |
+| M2 System tools | tested with mocks + needs hand test | pycaw, brightness, lock, screenshot, reminders on real hardware untested. Chat box focus was broken on Windows (fixed, needs hand test). |
+| M2B Launcher/adapters | **partial**, tested with mocks | AppIndex/denylist/approvals exist. Missing from spec: notepad, explorer, calculator, vscode adapters; Spotify search/play (`spotify:search:`) and Spotify→browser fallback; saving a contact by voice; planner "which path" sentence. |
+| M3 WhatsApp | **partial**, tested with mocks | Missing: dry-run mode, local send log without text, `config.yaml` whatsapp limits not wired into the tool. Real send needs hand test. Was broken end‑to‑end through the agent (crash on logging `Mode`), fixed. |
+| M4 Browser | **partial**, tested with mocks | Real Playwright never run in tests. Missing: configurable domain deny-list, pause-and-tell on login/CAPTCHA/payment pages. Also crashed through the agent (same logging bug), fixed. |
+
+### Security review findings (scope: policy bypass, secret leaks, unconfirmed messages, wrong-window keystrokes)
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| S1 | HIGH | Agent forwarded **all** model JSON args as kwargs. A hostile model could pass `config_path` (own allow-list → `open_app("powershell")`, any site via `open_website`, LOW risk, no ask), `hourly_cap/daily_cap/min_gap_seconds` (WhatsApp rate-limit bypass), `visible=False`, `mode`, `timeout_seconds`. | **Fixed**: `agent.filter_tool_args` keeps only schema params; internals injected by the loop. Tests: `tests/test_phase0_security.py`. |
+| S2 | HIGH | Free mode, first message to a contact: the confirmation did not read back the message text. | **Fixed**: prompt reads back contact, masked number and text. Test: `test_free_mode_first_contact_prompt_reads_back_message`. |
+| S3 | MEDIUM | Full WhatsApp/browser text and internal args were written to `logs/actions.jsonl` and `tool.start` events (also crashed on `Mode`). | **Fixed**: logs/events get public args with private text replaced by its length. |
+| S4 | MEDIUM | VS Code focus check accepted any window titled "<file> … code" (e.g. a browser tab); single-line typing checked focus once before a long `typewrite`. | **Fixed**: foreground process must be VS Code; focus re-checked before every 8-char chunk. |
+| S5 | MEDIUM | Digit-only PIN redacted inside any digit run (timestamps) → mangled logs, PIN-digit oracle, doctor false alarm. | **Fixed**: whole-number matching for numeric secrets (`secrets_guard.secret_in_text`). |
+| S6 | HIGH (user action) | The current Free-mode PIN appears in git history (old commit message `e297479` and the README of that era), and that history is already on `origin`. | **Open — you must change the PIN in Settings.** History not rewritten (destructive; your call). |
+| S7 | LOW | Wrong-PIN lockout resets after 60 s: a 4-digit PIN can be brute-forced over the local authenticated WebSocket in about 55 h. | Open (suggest escalating lockout). |
+| S8 | LOW | Browser confirmation prompts include page-derived button text (untrusted) verbatim. | Open. |
+| S9 | LOW | `run_script` is registered MEDIUM + allowlisted → would auto-allow in Restricted. No implementation existed yet. | To fix in M5 (Restricted must ask). |
+| S10 | INFO | Chat box: `setFocusable(true)`+`focus()` on a window shown inactive did not reliably activate it on Windows; the menu-close blur closed it. | **Fixed** (`avatar/src/main/chat-focus.js`, 8 node tests); needs hand test. A task starting now closes the chat. |
+
+### After fixes
+- pytest: **337 passed, 1 skipped**. Electron: **66 passed**. Doctor: ready (Ollama warning only).
+
+### NEXT STEP
+M5: implement `backend/tools/script_runner.py` (`run_script`), make Restricted ask / Free countdown in `policy.py`, tests in `tests/test_script_runner.py`.
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
