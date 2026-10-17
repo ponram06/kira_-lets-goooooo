@@ -229,6 +229,11 @@ TOOL_REGISTRY: dict[str, dict] = {
         "affects_people": True, "outside_workspace": False,
         "forbidden_category": None,
     },
+    "send_whatsapp": {
+        "risk": RiskLevel.HIGH, "allowlisted": False,
+        "affects_people": True, "outside_workspace": False,
+        "forbidden_category": None,
+    },
     "delete_file": {
         "risk": RiskLevel.HIGH, "allowlisted": False,
         "affects_people": False, "outside_workspace": False,
