@@ -48,6 +48,10 @@ def emit(event: dict[str, Any]) -> None:
             logger.debug("Error in event listener: %s", exc)
 
 
+MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
+BACKUP_COUNT = 3
+
+
 def log_action(
     tool: str,
     args: dict[str, Any],
@@ -85,6 +89,7 @@ def log_action(
     }
 
     try:
+        paths.rotate_log_file(ACTIONS_LOG, max_bytes=MAX_LOG_BYTES, backup_count=BACKUP_COUNT)
         with open(ACTIONS_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(event) + "\n")
     except OSError as exc:
@@ -92,3 +97,4 @@ def log_action(
 
     emit(event)
     return event
+

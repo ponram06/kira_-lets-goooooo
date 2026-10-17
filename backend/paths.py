@@ -49,3 +49,26 @@ def logs_dir() -> Path:
 def env_file() -> Path:
     e = os.environ.get("KIRA_ENV_FILE")
     return Path(e).expanduser().resolve() if e else home() / ".env"
+
+
+def rotate_log_file(log_path: Path, max_bytes: int = 5 * 1024 * 1024, backup_count: int = 3) -> None:
+    """
+    Rotate log_path if its size exceeds max_bytes, keeping up to backup_count backups.
+    Fail-safe on OSError (e.g. locks or permissions) so application logging is not disrupted.
+    """
+    try:
+        if not log_path.exists() or log_path.stat().st_size < max_bytes:
+            return
+        for i in range(backup_count - 1, 0, -1):
+            src = log_path.with_name(f"{log_path.stem}.{i}{log_path.suffix}")
+            dst = log_path.with_name(f"{log_path.stem}.{i + 1}{log_path.suffix}")
+            if src.exists():
+                if dst.exists():
+                    dst.unlink(missing_ok=True)
+                src.rename(dst)
+        dst1 = log_path.with_name(f"{log_path.stem}.1{log_path.suffix}")
+        if dst1.exists():
+            dst1.unlink(missing_ok=True)
+        log_path.rename(dst1)
+    except OSError:
+        pass

@@ -387,7 +387,13 @@ M10: packaging — electron-builder portable/NSIS build with the backend bundled
 | **M10. Packaging** | **IN PROGRESS** | Unfinished work | `backend/paths.py` (writable locations abstraction) and `requirements-dev.txt` created; PyInstaller bundling, electron-builder config, log rotation, setup script, and clean-venv test are in progress. |
 | **M11. Documentation & Handoff** | Not started | Pending M10 | Architecture diagrams, user guide, demo script, third-party notices, and completion checklist. |
 
+### Sub-step M10.a: Size-Capped Log Rotation — done (2026-10-17)
+- Implemented `paths.rotate_log_file(log_path, max_bytes, backup_count)` in `backend/paths.py`. Default 5 MB cap with 3 backup generations (`.1.jsonl`, `.2.jsonl`, `.3.jsonl`).
+- Integrated log rotation into `backend/audit.py` (`log_action`) and `backend/events.py` (`_write_log`) prior to append. Handled `OSError` fail-safes so application logging is never disrupted.
+- Added 3 unit tests in `tests/test_log_rotation.py` (all passed).
+
 ### NEXT STEP
-M10: Complete packaging — PyInstaller spec for backend, electron-builder portable/NSIS config, log rotation, `scripts/setup.bat`, and clean virtual environment test.
+M10.b: scripts/setup.bat, pinned requirements.lock, and clean-virtualenv install test.
+
 
 

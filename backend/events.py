@@ -153,11 +153,17 @@ def publish(
     return event
 
 
+MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
+BACKUP_COUNT = 3
+
+
 def _write_log(event: dict[str, Any]) -> None:
-    """Append *event* as one JSONL line to logs/events.jsonl."""
+    """Append *event* as one JSONL line to logs/events.jsonl, rotating if capped."""
     try:
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        paths.rotate_log_file(EVENTS_LOG, max_bytes=MAX_LOG_BYTES, backup_count=BACKUP_COUNT)
         with open(EVENTS_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
     except OSError as exc:
         logger.debug("Failed to write events log: %s", exc)
+
