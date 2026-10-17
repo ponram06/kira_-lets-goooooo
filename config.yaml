@@ -119,6 +119,15 @@ tools:
   screenshots_dir: "screenshots"   # inside workspace/ (git-ignored)
 
 # =============================================================================
+# WhatsApp settings (Milestone 3)
+# =============================================================================
+whatsapp:
+  rate_limit_per_hour: 5
+  daily_cap: 20
+  min_gap_seconds: 30
+  max_message_length: 280
+
+# =============================================================================
 # Voice settings (Step 4)
 # =============================================================================
 voice:

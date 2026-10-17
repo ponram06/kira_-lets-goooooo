@@ -51,3 +51,6 @@ workspace/*
 avatar/node_modules/
 avatar/dist/
 avatar/assets/ryuk*.png
+
+# Contacts (never commit real phone numbers)
+contacts.yaml

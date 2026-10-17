@@ -1,0 +1,11 @@
+# =============================================================================
+# Kira — contacts.example.yaml
+# Copy this file to %APPDATA%\Kira\contacts.yaml and add your real contacts.
+# Real contacts must NEVER be committed to git.
+# Phone numbers must include country code (e.g. +1 for US, +44 for UK, +91 for IN).
+# =============================================================================
+
+contacts:
+  meldan: "+15551234567"
+  alice: "+442071838750"
+  bob: "+919876543210"
