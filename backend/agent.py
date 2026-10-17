@@ -188,24 +188,39 @@ class AgentRunner:
 
                 # Command inspection for allowlisted and chaining flags
                 allowlisted_flag: Optional[bool] = None
+                approved_flag: Optional[bool] = None
                 chained_flag: bool = False
 
                 if fn_name == "run_command":
                     cmd_str = fn_args.get("command", "")
                     chained_flag, allowlisted_flag, _ = inspect_command(cmd_str)
+                elif fn_name == "open_any_app":
+                    from backend.app_index import APP_INDEX
+                    from backend.app_approvals import is_target_approved
+                    app_q = fn_args.get("name", "")
+                    res = APP_INDEX.resolve(app_q)
+                    if res.status == "found" and res.match:
+                        if res.match.is_store_app:
+                            approved_flag = is_target_approved(res.match.app_id, is_store_app=True)
+                        else:
+                            approved_flag = is_target_approved(res.match.target_path, res.match.arguments, is_store_app=False)
+                    else:
+                        approved_flag = False
 
                 # Policy gate
                 decision = check(
                     fn_name,
                     self.mode_manager.mode,
                     allowlisted=allowlisted_flag,
+                    approved=approved_flag,
                     chained=chained_flag,
                 )
                 logger.info(
-                    "Policy check for '%s' in %s mode (allowlisted=%s, chained=%s): %s",
+                    "Policy check for '%s' in %s mode (allowlisted=%s, approved=%s, chained=%s): %s",
                     fn_name,
                     self.mode_manager.mode.value,
                     allowlisted_flag,
+                    approved_flag,
                     chained_flag,
                     decision,
                 )
@@ -225,13 +240,24 @@ class AgentRunner:
                         + ("Shell metacharacters/chaining blocked." if chained_flag else "Do not attempt this action again.")
                     )
                 elif decision == "ask":
-                    approved = await self._confirm(
-                        f"Action '{fn_name}' requires confirmation (Mode: {self.mode_manager.mode.value}). "
-                        f"Arguments: {fn_args}. Allow execution? (yes/no):"
+                    prompt = (
+                        f"Kira would like to open '{fn_args.get('name')}' for the first time. Allow? (yes/no):"
+                        if fn_name == "open_any_app"
+                        else f"Action '{fn_name}' requires confirmation (Mode: {self.mode_manager.mode.value}). Arguments: {fn_args}. Allow execution? (yes/no):"
                     )
-                    if not approved:
+                    user_ok = await self._confirm(prompt)
+                    if not user_ok:
                         observation = f"USER DECLINED: Execution of '{fn_name}' was not approved by user."
                     else:
+                        if fn_name == "open_any_app":
+                            from backend.app_approvals import save_approval
+                            app_q = fn_args.get("name", "")
+                            res = APP_INDEX.resolve(app_q)
+                            if res.match:
+                                if res.match.is_store_app:
+                                    save_approval(res.match.app_id, is_store_app=True)
+                                else:
+                                    save_approval(res.match.target_path, res.match.arguments, is_store_app=False)
                         observation = await self._run_tool(fn_name, fn_args)
                 elif decision == "countdown":
                     print(f"\n[Free Mode Countdown] Executing '{fn_name}' in {self.countdown_seconds} seconds... Say Stop to cancel.")

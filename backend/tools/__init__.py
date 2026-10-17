@@ -15,6 +15,7 @@ from backend.tools.voice_stub import speak
 from backend.tools.vscode_visible import open_in_vscode
 from backend.tools.system_control import brightness, lock_pc, system_info, take_screenshot, volume
 from backend.tools.reminders_tool import cancel_reminder, list_reminders, set_reminder, set_timer
+from backend.tools.app_launcher import media_control, open_any_app
 
 # Mapping of tool name -> callable implementation
 TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
@@ -35,6 +36,9 @@ TOOL_FUNCTIONS: dict[str, Callable[..., Any]] = {
     "set_reminder": set_reminder,
     "list_reminders": list_reminders,
     "cancel_reminder": cancel_reminder,
+    # M2B universal launcher and adapters
+    "open_any_app": open_any_app,
+    "media_control": media_control,
 }
 
 
@@ -73,6 +77,13 @@ M2_TOOLS_SCHEMA: list[dict] = [
     _fn("list_reminders", "List pending timers and reminders with their ids."),
     _fn("cancel_reminder", "Cancel a timer or reminder by id.",
         {"reminder_id": {"type": "string"}}, ["reminder_id"]),
+    _fn("open_any_app", "Open an installed Windows desktop or Store application by name.",
+        {"name": {"type": "string", "description": "Name of the application to open (e.g. 'Spotify', 'Google Chrome')"}},
+        ["name"]),
+    _fn("media_control", "Control media playback on supported applications (e.g. Spotify).",
+        {"action": {"type": "string", "enum": ["open", "play_pause", "next", "previous", "volume_up", "volume_down"], "description": "Media action to perform"},
+         "app": {"type": "string", "description": "Target application name (default: 'spotify')"}},
+        ["action"]),
 ]
 
 # OpenAI-compatible function schemas
@@ -224,6 +235,8 @@ __all__ = [
     "open_website",
     "speak",
     "open_in_vscode",
+    "open_any_app",
+    "media_control",
     "TOOL_FUNCTIONS",
     "KIRA_TOOLS_SCHEMA",
 ]
