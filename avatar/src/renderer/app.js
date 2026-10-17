@@ -27,13 +27,44 @@
     canvas.width = config.window.width || 480;
     canvas.height = config.window.height || 420;
   }
-  const renderer = new window.SpriteRenderer(canvas, config, configData.characterMeta);
-  renderer.start();
+  const sprite = new window.SpriteRenderer(canvas, config, configData.characterMeta);
+  sprite.start();
 
   // 3. Setup speech bubble
   const bubbleElem = document.getElementById('speech-bubble');
   const textElem = document.getElementById('bubble-text');
   const bubble = new window.SpeechBubble(bubbleElem, textElem, fadeDelayMs);
+
+  // M8: the view owns the sprite (always available) and the on-demand VRM renderer
+  const vrmCanvas = document.getElementById('vrm-canvas');
+  vrmCanvas.width = canvas.width;
+  vrmCanvas.height = canvas.height;
+  let lowPower = Boolean(configData.ui?.lowPower);
+  const renderCfg = config.render || {};
+  const renderer = new window.KiraAvatarView.AvatarView({
+    sprite,
+    spriteCanvas: canvas,
+    vrmCanvas,
+    loadModel: (profile) => window.kiraAvatar.loadModel(profile),
+    importVrm: () => import('./vrm-boot.js'),
+    notice: (text) => bubble.say(text),
+    settings: () => ({
+      lowPower,
+      fpsCap: renderCfg.fps_cap,
+      pixelRatioCap: renderCfg.pixel_ratio_cap,
+      antialias: renderCfg.antialias,
+      lookAt: renderCfg.look_at
+    })
+  });
+  let character = null;
+  const applyCharacter = (c) => {
+    if (!c || typeof c !== 'object') return;
+    const same = character && character.id === c.id && character.renderer === c.renderer && character.asset === c.asset;
+    character = c;
+    if (!same) renderer.setCharacter(c);
+  };
+  document.addEventListener('visibilitychange', () => renderer.setVisible(!document.hidden));
+  applyCharacter(configData.character);
 
   // Show greeting initially
   bubble.say(greeting);
@@ -105,7 +136,9 @@
   const chatForm = document.getElementById('chat-form');
   const chatInput = document.getElementById('chat-input');
   const chatCloseBtn = document.getElementById('chat-close-btn');
-  const interactiveElements = [dragHandle, bubbleElem, controlBtn, chatDock];
+  // The character itself is hit-tested per pixel (below); these UI parts
+  // always take the mouse while hovered.
+  const interactiveElements = [bubbleElem, controlBtn, chatDock];
   const HIDE_BUTTON_MS = 2000;
   let hideBtnTimer = null;
 
@@ -122,15 +155,43 @@
     if (!elem) continue;
     elem.addEventListener('pointerenter', () => {
       window.kiraAvatar.setIgnoreMouseEvents(false);
+      pixelHit.capturing = true;
       if (elem !== bubbleElem && elem !== chatDock) showControlButton();
     });
     elem.addEventListener('pointerleave', (e) => {
       if (!isDragging && !interactiveElements.some(el => el && el.contains(e.relatedTarget))) {
         window.kiraAvatar.setIgnoreMouseEvents(true, true);
+        pixelHit.capturing = false;   // the next mousemove re-tests the character pixels
         scheduleHideButton();
       }
     });
   }
+
+  // M8: click-through follows the visible pixels of the character. Mouse
+  // moves are forwarded while click-through is on, so we can sample alpha
+  // under the cursor and capture only over opaque pixels (drag still works).
+  const pixelHit = new window.KiraRenderGuard.PixelHit(config.alpha_threshold || 20);
+  let lastHitAt = 0;
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) return;
+    const now = performance.now();
+    if (now - lastHitAt < 30) return;               // ~30 samples/s is plenty
+    lastHitAt = now;
+    const overUi = interactiveElements.some((el) => el && !el.classList.contains('hidden') && el.contains(e.target));
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / Math.max(1, rect.width));
+    const y = (e.clientY - rect.top) * (canvas.height / Math.max(1, rect.height));
+    const inside = x >= 0 && y >= 0 && x < canvas.width && y < canvas.height;
+    const change = pixelHit.update(inside ? renderer.alphaAt(x, y) : 0, overUi);
+    if (change === 'capture') {
+      window.kiraAvatar.setIgnoreMouseEvents(false);
+      showControlButton();
+    } else if (change === 'release') {
+      window.kiraAvatar.setIgnoreMouseEvents(true, true);
+      scheduleHideButton();
+    }
+    if (inside) renderer.setLook((x / canvas.width) * 2 - 1, (y / canvas.height) * 2 - 1);
+  });
 
   // Chat Dock Controller (opens ONLY via explicit "Chat…" click in avatar menu)
   const closeChat = () => {
@@ -242,6 +303,10 @@
       isLocked = ui.locked;
       dragHandle.classList.toggle('locked', isLocked);
     }
+    if (typeof ui.lowPower === 'boolean' && ui.lowPower !== lowPower) {
+      lowPower = ui.lowPower;
+      if (character) renderer.setCharacter(character);   // re-choose sprite / 3D
+    }
     if (typeof ui.sleeping === 'boolean') {
       container.classList.toggle('sleeping', ui.sleeping);
       renderer.setSleeping(ui.sleeping);
@@ -263,6 +328,8 @@
       renderFeed();
     }
 
+    renderer.gestureEvent(type);   // small nod / tilt / shake on task events (3D only)
+
     switch (type) {
       case 'snapshot':
         if (payload?.state) {
@@ -271,6 +338,15 @@
         if (payload?.mode) {
           renderer.setMode(payload.mode);
         }
+        applyCharacter(payload?.character);
+        break;
+
+      case 'persona_change':
+        applyCharacter(payload?.character);
+        break;
+
+      case 'emotion':
+        renderer.setEmotion(payload?.emotion || null);
         break;
 
       case 'state':

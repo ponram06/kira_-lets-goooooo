@@ -46,6 +46,7 @@ const { scaleFor, scaledWindowSize } = require('../shared/sizes');
 const { buildHitMask, isMaskNonEmpty } = require('../shared/hitmask');
 const { ChatFocus } = require('./chat-focus');
 const { showHighlight } = require('./highlight-overlay');
+const { readModel, safeAppPath } = require('./model-file');
 
 // Disable all touch/trackpad pinch-to-zoom gestures at Chromium engine level
 app.commandLine.appendSwitch('disable-pinch');
@@ -96,7 +97,8 @@ const live = {
   sleeping: false,
   mode: 'restricted',
   freeAvailable: false,
-  freeTimeout: 600
+  freeTimeout: 600,
+  character: null      // M8 character profile from the backend
 };
 
 /**
@@ -191,6 +193,7 @@ function sendUiState() {
     scale: scaleFor(userCfg.size),
     feedVisible: userCfg.feedVisible,
     locked: userCfg.locked,
+    lowPower: userCfg.lowPower,
     sleeping: live.sleeping,
     micMuted: live.micMuted,
     connected: live.connected
@@ -210,6 +213,7 @@ function menuState() {
     size: userCfg.size,
     locked: userCfg.locked,
     feedVisible: userCfg.feedVisible,
+    lowPower: userCfg.lowPower,
     connected: live.connected
   };
 }
@@ -323,6 +327,7 @@ const menuActions = {
   setSize: (size) => applySize(size),
   setLocked: (locked) => { userCfg.locked = locked; saveUserCfg(); sendUiState(); rebuildTray(); },
   setFeedVisible: (visible) => { userCfg.feedVisible = visible; saveUserCfg(); sendUiState(); },
+  setLowPower: (on) => { userCfg.lowPower = Boolean(on); saveUserCfg(); sendUiState(); rebuildTray(); },
   openChat: () => chatFocus.open(live.state) // refused while working
 };
 
@@ -414,6 +419,7 @@ function trackBackendEvent(type, payload) {
       if (payload.mode) live.mode = payload.mode;
       if (payload.persona) live.persona = payload.persona;
       if (Array.isArray(payload.personas)) live.personas = payload.personas;
+      if (payload.character && typeof payload.character === 'object') live.character = payload.character;
       if (typeof payload.mic_muted === 'boolean') live.micMuted = payload.mic_muted;
       if (typeof payload.sleeping === 'boolean') live.sleeping = payload.sleeping;
       if (typeof payload.free_mode_available === 'boolean') live.freeAvailable = payload.free_mode_available;
@@ -424,6 +430,7 @@ function trackBackendEvent(type, payload) {
       break;
     case 'persona_change':
       if (payload.persona) live.persona = payload.persona;
+      if (payload.character && typeof payload.character === 'object') live.character = payload.character;
       break;
     case 'mic_mute':
       live.micMuted = Boolean(payload.muted);
@@ -520,8 +527,16 @@ function setupIpcHandlers() {
         mouthOpenDataUrl: characterImageMeta.mouthOpenDataUrl
       },
       hitMask: characterHitMask ? Array.from(characterHitMask) : [],
-      ui: { scale: scaleFor(userCfg.size), feedVisible: userCfg.feedVisible, locked: userCfg.locked }
+      ui: { scale: scaleFor(userCfg.size), feedVisible: userCfg.feedVisible, locked: userCfg.locked, lowPower: userCfg.lowPower },
+      character: live.character
     };
+  });
+
+  // M8: the sandboxed renderer asks main for the character's .vrm bytes
+  ipcMain.handle('avatar:load-model', (event, profile) => {
+    if (!fromAvatar(event)) throw new Error('Unauthorized IPC sender');
+    const asset = profile && typeof profile.asset === 'string' ? profile.asset : null;
+    return readModel(asset, path.resolve(AVATAR_ROOT, '..'));
   });
 
   ipcMain.on('avatar:open-menu', (event) => {
@@ -597,8 +612,9 @@ function setupIpcHandlers() {
 app.whenReady().then(() => {
   protocol.handle('app', (request) => {
     const url = new URL(request.url);
-    const safePath = path.normalize(path.join(AVATAR_ROOT, url.pathname));
-    return net.fetch(`file://${safePath}`);
+    const safePath = safeAppPath(AVATAR_ROOT, url.pathname);   // never outside avatar/
+    if (!safePath) return new Response('Forbidden', { status: 403 });
+    return net.fetch(require('url').pathToFileURL(safePath).toString());
   });
 
   loadConfig();

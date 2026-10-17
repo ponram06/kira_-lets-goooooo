@@ -29,7 +29,8 @@ html, body {
 }
 
 /* Canvas layer */
-#avatar-canvas {
+#avatar-canvas,
+#vrm-canvas {
   position: absolute;
   top: 0;
   left: 0;
@@ -276,4 +277,9 @@ html, body {
 
 #chat-close-btn:hover {
   background: rgba(71, 85, 105, 0.8);
+}
+
+/* M8: the 3D canvas stays hidden until a VRM character is active */
+#vrm-canvas {
+  display: none;
 }

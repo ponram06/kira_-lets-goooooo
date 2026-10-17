@@ -555,6 +555,24 @@ After a task that took two or more successful steps, Kira asks: *"Save it as a s
 
 Test: `.venv\Scripts\python.exe -m pytest -q tests\test_skills.py`
 
+### M8. 3D Avatar (VRM)
+
+Each persona in `config.yaml` has a `character:` profile: `display_name`, `renderer` (`sprite` or `vrm`), `asset` (a `.vrm` path; relative paths start at the project folder), `framing` (`bust` / `full`), `theme` and `voice`. Switching persona from the tray or avatar menu switches the character live.
+
+- Renderer: three.js `0.185.1` + `@pixiv/three-vrm` `3.5.5` (pinned, loaded from local `node_modules` only when a VRM character is active). Transparent canvas in the existing always-on-top window, 30 FPS cap (5 FPS asleep, paused when hidden), antialiasing off, pixel ratio capped at 1.25, `low-power` GPU preference, full disposal on switch.
+- Animation: breathing and sway, blinking, smoothed look-at-cursor, poses for idle / listening / thinking / speaking / working / error, a nod / tilt / shake on task start / finish / error. Mood tags from the brain (`[emotion:happy]`, never spoken) blend into the happy, angry, sad, surprised and relaxed expressions. Lip sync maps loudness to `aa ih ou ee oh` (VRM 1.0) or `A I U E O` (VRM 0.x).
+- Click-through follows the visible pixels (alpha sampled under the cursor) for both the 3D model and the 2D sprite; dragging still works on the character.
+- **Fallback**: if the file is missing, WebGL fails, the model fails to load, or the average frame rate stays below 20 FPS for 10 seconds, Kira switches to the 2D sprite and says why. The avatar menu has **Low-power mode (2D avatar)**.
+- Kira never downloads or bundles third-party models. `models/` and `*.vrm` are git-ignored.
+
+**Adding your own model**
+1. Get a model you are allowed to use: create one in [VRoid Studio](https://vroid.com/en/studio) (free) and export it as VRM, or use one whose license you have checked (VRM files carry license metadata; respect "avatar permission", "redistribution" and "commercial use").
+2. Copy it to `models\kira.vrm` inside the project folder (or set `persona.available_personas.kira.character.asset` in `config.yaml` to another path).
+3. Make sure that character has `renderer: vrm`, then restart Kira or switch persona away and back.
+4. If you see "Using the 2D avatar", the bubble says why (file not found, WebGL, slow, load error).
+
+Tests: `cd avatar; npm test` (VRM logic with a mocked WebGL) and the real-library smoke test in a hidden window: `cd avatar; $env:ELECTRON_RUN_AS_NODE=$null; npm run smoke:vrm` (uses a tiny generated test model).
+
 ### Avatar Chat Box (Fallback Input)
 
 When a microphone is unavailable or muted, or when you prefer typing:

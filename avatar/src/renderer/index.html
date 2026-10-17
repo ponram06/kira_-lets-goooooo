@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-21BedjVDb0lHcXh+sOqVKJAWHELLP/D5XBV/8IJzXcE='; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self';">
   <title>Kira Avatar</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -16,6 +16,8 @@
 
     <!-- Canvas layer -->
     <canvas id="avatar-canvas" width="480" height="420"></canvas>
+    <!-- 3D VRM layer (M8): shown only while a VRM character is active -->
+    <canvas id="vrm-canvas" width="480" height="420"></canvas>
 
     <!-- Character drag area -->
     <div id="drag-handle" title="Drag to move avatar"></div>
@@ -39,7 +41,15 @@
     </div>
   </div>
 
+  <!-- Import map for the on-demand 3D renderer (hash pinned in the CSP above) -->
+  <script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/","@pixiv/three-vrm":"../../node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"}}</script>
   <script src="../shared/feed.js"></script>
+  <script src="../shared/characters.js"></script>
+  <script src="../shared/avatar-anim.js"></script>
+  <script src="../shared/expressions.js"></script>
+  <script src="../shared/render-guard.js"></script>
+  <script src="vrm-core.js"></script>
+  <script src="avatar-view.js"></script>
   <script src="sprite-renderer.js"></script>
   <script src="speech-bubble.js"></script>
   <script src="app.js"></script>

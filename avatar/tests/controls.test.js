@@ -79,7 +79,7 @@ describe('Avatar menu', () => {
     const { actions } = recorder();
     const l = labels(buildAvatarTemplate(baseState, actions));
     assert.deepEqual(l, ['Mute microphone', 'Chat…', 'Sleep', 'Persona', 'Mode', 'Size', 'Lock position',
-      'Show action feed', 'Settings…', 'Stop task', 'Quit Kira']);
+      'Show action feed', 'Low-power mode (2D avatar)', 'Settings…', 'Stop task', 'Quit Kira']);
   });
 
   it('Chat item opens chat when idle and is disabled when working', () => {
@@ -152,10 +152,10 @@ describe('User config (avatar.json)', () => {
   it('round-trips valid values and drops unknown ones (never a mode)', () => {
     const dir = tmp();
     saveUserConfig(dir, { position: { x: 10.4, y: 20 }, size: 'large', locked: true, feedVisible: false,
-      startWithWindows: true, showHideHotkey: 'Ctrl+Shift+K', mode: 'free', persona: 'ryuk' });
+      lowPower: true, startWithWindows: true, showHideHotkey: 'Ctrl+Shift+K', mode: 'free', persona: 'ryuk' });
     const cfg = loadUserConfig(dir);
     assert.deepEqual(cfg, { position: { x: 10, y: 20 }, size: 'large', locked: true, feedVisible: false,
-      startWithWindows: true, showHideHotkey: 'Ctrl+Shift+K' });
+      lowPower: true, startWithWindows: true, showHideHotkey: 'Ctrl+Shift+K' });
     assert.equal('mode' in cfg, false);
   });
 

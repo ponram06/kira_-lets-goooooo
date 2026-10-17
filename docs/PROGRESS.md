@@ -322,6 +322,34 @@ M8: VRM renderer in `avatar/` (three + @pixiv/three-vrm pinned), character profi
 
 ---
 
+## M8. 3D avatar (VRM) — done with a generated test model; your model needs hand test (2026-10-17)
+
+### What was done
+- Packages (pre-approved, pinned, `npm audit`: 0 vulnerabilities): `three@0.185.1`, `@pixiv/three-vrm@3.5.5`.
+- Character profiles under each persona in `config.yaml` (`character:`), sent by the backend in snapshots and `persona_change` (no prompts). Electron main validates and reads the `.vrm` (`src/main/model-file.js`: .vrm only, local paths only, glTF magic, 200 MB cap) and hands bytes to the sandboxed renderer.
+- Pure, tested modules: `shared/characters.js` (validation + renderer choice), `shared/avatar-anim.js` (poses, idle, blink, look-at, gestures), `shared/expressions.js` (emotion tags, VRM 0.x/1.0 names, blending, lip sync), `shared/render-guard.js` (FPS fallback monitor, settings, limiter, pixel hit).
+- `renderer/vrm-core.js` (three injected; 30 FPS cap, 5 asleep, paused hidden, AA off, pixel-ratio cap, alpha hit test, context-loss and slow fallback, full disposal), `renderer/vrm-boot.js` (ES module, import map with CSP hash), `renderer/avatar-view.js` (live switch, automatic sprite fallback with notice).
+- Click-through follows visible pixels for both renderers; Low-power menu item; backend emotion tags (`brain.extract_emotion`, never spoken) → `emotion` events.
+- Fixed while here: `app://` protocol path containment; sprite renderer could start two loops (added `stop()`).
+- Real-library smoke test: `npm run smoke:vrm` loads a generated VRM 1.0 (`scripts/make-test-vrm.js`) through the real index.html/import map/three/three-vrm in a hidden window → **PASS**, no console errors.
+
+### Tests
+- Electron **111 passed** (38 new in `tests/vrm.test.js`). pytest **462 passed, 1 skipped** (10 new in `tests/test_avatar_profiles.py`).
+
+### Known gaps / needs hand test
+- Your own .vrm (VRoid or other) is not tested: bone orientation of real models, expression names, camera framing.
+- Real frame rate on the iGPU not measured yet (Part C bench).
+- Look-at follows the cursor only while it is over the avatar window.
+
+### Steps for you to add your model
+1. Copy your `.vrm` to `models\kira.vrm` (git-ignored) or set `persona.available_personas.kira.character.asset` in `config.yaml`.
+2. Keep `renderer: vrm` for that character. 3. Restart Kira or switch persona away and back. 4. If the bubble says "Using the 2D avatar", it says why.
+
+### NEXT STEP
+M9: persona polish — per-persona Edge voice applied live, themes (notebook black/red, Gotham dark), mode indicator blue/red glow, spoken startup greeting, graceful spoken errors, proactive reminders.
+
+---
+
 ## Overall Milestones Status Summary
 - **M1. App controls**: Done (tray, menus, PIN-gated Free mode, settings window, doctor, secret redaction, lifecycle).
 - **M2. System and app tools**: Done (system controls, reminders, countdown, policy, avatar chat box fallback, isolated confirmations).
@@ -329,4 +357,7 @@ M8: VRM renderer in `avatar/` (three + @pixiv/three-vrm pinned), character profi
 - **M3. Messaging (WhatsApp adapter)**: Done (contacts resolution, phone masking, provenance guard, rate limits, foreground check, single send).
 - **M4. Browser tasks (Playwright)**: Done (headed mode, clean profile, IP safety, DNS rebinding defence, prompt injection guard, taint tracking, context hardening).
 - **M5. Self-written scripts**: Done (static checks, runtime limits, ask/countdown, optional Docker/Windows Sandbox).
+- **M6. Screen control**: Done, needs hand test with a vision provider.
+- **M7. Learned skills**: Done.
+- **M8. 3D avatar**: Done with a generated test model; needs your .vrm.
 

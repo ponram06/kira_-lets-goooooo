@@ -94,9 +94,18 @@ class SpriteRenderer {
     this.rawLoudness = Math.min(1.0, Math.max(0.0, Number(val) || 0.0));
   }
 
+  stop() {
+    this._running = false;
+    if (this._rafId) cancelAnimationFrame(this._rafId);
+    this._rafId = null;
+  }
+
   start() {
+    if (this._running) return;       // never run two loops
+    this._running = true;
     const loop = (timestamp) => {
-      requestAnimationFrame(loop);
+      if (!this._running) return;
+      this._rafId = requestAnimationFrame(loop);
 
       if (document.hidden) return;   // window hidden: skip drawing
       const elapsed = timestamp - this.lastFrameTime;
@@ -106,7 +115,7 @@ class SpriteRenderer {
       this.render(timestamp);
     };
 
-    requestAnimationFrame(loop);
+    this._rafId = requestAnimationFrame(loop);
   }
 
   render(timestamp) {

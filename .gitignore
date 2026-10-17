@@ -54,3 +54,7 @@ avatar/assets/ryuk*.png
 
 # Contacts (never commit real phone numbers)
 contacts.yaml
+
+# 3D character models (M8) — never commit model files
+models/
+*.vrm

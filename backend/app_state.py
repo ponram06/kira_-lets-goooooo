@@ -71,6 +71,20 @@ class AppState:
     def system_prompt(self) -> str:
         return self._personas.get(self.persona, {}).get("system_prompt", self._fallback_prompt)
 
+    _CHAR_KEYS = ("display_name", "renderer", "asset", "voice", "theme", "framing")
+
+    def character_profile(self, name: str = "") -> dict:
+        """Avatar character profile of a persona (M8). No prompts, no secrets."""
+        key = name or self.persona
+        p = self._personas.get(key, {}) or {}
+        c = p.get("character") or {}
+        prof = {"id": key, "display_name": str(c.get("display_name") or str(p.get("name", key)).capitalize())}
+        defaults = {"renderer": "sprite", "asset": None, "voice": "", "theme": "notebook", "framing": "bust"}
+        for k, default in defaults.items():
+            v = c.get(k, default)
+            prof[k] = str(v)[:1024] if v is not None else None
+        return prof
+
     def _apply_persona(self, name: str) -> bool:
         if self._personas and name not in self._personas:
             return False
@@ -84,7 +98,8 @@ class AppState:
             if not self._apply_persona(name):
                 return False
         self._save(persona=name)
-        _events.publish("persona.change", f"Persona: {self.persona_display}", {"persona": name})
+        _events.publish("persona.change", f"Persona: {self.persona_display}",
+                        {"persona": name, "character": self.character_profile(name)})
         return True
 
     # ── microphone ───────────────────────────────────────────────────────────
@@ -177,6 +192,7 @@ class AppState:
         return {
             "persona": self.persona,
             "personas": self.personas,
+            "character": self.character_profile(),
             "mic_muted": self.mic_muted,
             "sleeping": self.sleeping,
             "mic_available": self.mic_available,

@@ -17,6 +17,11 @@ try {
 contextBridge.exposeInMainWorld('kiraAvatar', {
   getConfig: () => ipcRenderer.invoke('avatar:get-config'),
 
+  // M8: returns { ok, bytes?: ArrayBuffer, reason? } for the character's .vrm
+  loadModel: (profile) => ipcRenderer.invoke('avatar:load-model', {
+    asset: profile && typeof profile.asset === 'string' ? profile.asset : null
+  }),
+
   onEvent: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const subscription = (_event, data) => callback(data);

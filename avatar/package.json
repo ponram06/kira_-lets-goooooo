@@ -5,9 +5,12 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test \"tests/*.test.js\""
+    "test": "node --test \"tests/*.test.js\"",
+    "smoke:vrm": "electron scripts/vrm-smoke.js"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "3.5.5",
+    "three": "0.185.1",
     "ws": "8.22.0"
   },
   "devDependencies": {

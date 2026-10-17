@@ -20,6 +20,7 @@ const DEFAULTS = Object.freeze({
   size: 'medium',             // small | medium | large
   locked: false,              // lock position (no dragging)
   feedVisible: true,          // action feed panel
+  lowPower: false,            // M8: 2D avatar only, lower frame rate
   startWithWindows: false,    // login item (default off)
   showHideHotkey: 'Ctrl+Alt+H'
 });
@@ -49,6 +50,7 @@ function sanitize(raw) {
   if (SIZE_NAMES.includes(raw.size)) out.size = raw.size;
   if (typeof raw.locked === 'boolean') out.locked = raw.locked;
   if (typeof raw.feedVisible === 'boolean') out.feedVisible = raw.feedVisible;
+  if (typeof raw.lowPower === 'boolean') out.lowPower = raw.lowPower;
   if (typeof raw.startWithWindows === 'boolean') out.startWithWindows = raw.startWithWindows;
   if (isValidHotkey(raw.showHideHotkey)) out.showHideHotkey = raw.showHideHotkey;
   return out;

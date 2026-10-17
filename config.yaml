@@ -48,6 +48,16 @@ persona:
     kira:
       name: kira
       greeting: "Greetings. Let us work strategically and methodically."
+      # Avatar character profile (M8). renderer: sprite | vrm. A relative
+      # asset path is resolved from the project folder (models/ is git-ignored).
+      # If the .vrm file is missing, the 2D sprite is used with a notice.
+      character:
+        display_name: "Kira"
+        renderer: vrm
+        asset: "models/kira.vrm"
+        framing: bust             # bust | full
+        theme: notebook           # notebook (black and red) | gotham
+        voice: "en-US-GuyNeural"
       system_prompt: |
         You are Kira, a calm and strategic AI mentor for software developers.
         You think carefully before answering, explain your reasoning step by step,
@@ -59,6 +69,13 @@ persona:
     ryuk:
       name: ryuk
       greeting: "Hey... Got an apple? Fine, let's see what you broke today."
+      character:
+        display_name: "Ryuk"
+        renderer: sprite
+        asset: null
+        framing: bust
+        theme: gotham
+        voice: "en-US-ChristopherNeural"
       system_prompt: |
         You are Ryuk, a bored, sarcastic, and playful desktop companion for a developer.
         You drop occasional dry apple jokes and tease the human, but you ALWAYS perform

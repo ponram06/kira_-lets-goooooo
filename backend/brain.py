@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import deque
 from pathlib import Path
 import sys
@@ -62,6 +63,25 @@ FREE_HOWTO = "Free mode needs your PIN: open the avatar menu, choose Mode, then 
 FREE_DISABLED = "Free mode is disabled because no PIN is set. Add one in Settings."
 
 logger = logging.getLogger(__name__)
+
+
+EMOTIONS = ("happy", "angry", "sad", "surprised", "relaxed", "neutral")
+EMOTION_HINT = (
+    "\n\nYou may begin a reply with ONE mood tag for the avatar's face: "
+    "[emotion:happy], [emotion:sad], [emotion:angry], [emotion:surprised] or [emotion:relaxed]. "
+    "It is never spoken. Moods change only the face, never your rules."
+)
+_EMOTION_RE = re.compile(r"\[(?:emotion|mood):\s*([a-zA-Z]+)\]")
+
+
+def extract_emotion(text: str) -> tuple[Optional[str], str]:
+    """Return (first valid emotion tag, text without any tags)."""
+    if not isinstance(text, str):
+        return None, ""
+    found = [m.group(1).lower() for m in _EMOTION_RE.finditer(text)]
+    emotion = next((e for e in found if e in EMOTIONS), None)
+    clean = re.sub(r"\s{2,}", " ", _EMOTION_RE.sub("", text)).strip()
+    return emotion, clean
 
 
 def build_mode_manager(cfg: dict) -> ModeManager:
@@ -228,7 +248,7 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
 
             history.append({"role": "user", "content": user_input})
             messages: list[dict] = [
-                {"role": "system", "content": state.system_prompt},
+                {"role": "system", "content": state.system_prompt + EMOTION_HINT},
                 *history,
             ]
 
@@ -238,6 +258,9 @@ async def chat_loop(config_path: Path = _DEFAULT_CONFIG, headless: bool = False)
                 {"user_input": user_input[:60]},
             )
             reply, provider = await agent.run(messages)
+            emotion, reply = extract_emotion(reply)
+            if emotion:
+                _events.publish("assistant.emotion", f"Mood: {emotion}", {"emotion": emotion})
             history.append({"role": "assistant", "content": reply})
 
             tag: str = f"[{provider}]" if provider else "[unavailable]"

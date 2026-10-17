@@ -105,6 +105,12 @@ function buildAvatarTemplate(state, actions) {
       checked: Boolean(state.feedVisible),
       click: () => actions.setFeedVisible(!state.feedVisible)
     },
+    {
+      label: 'Low-power mode (2D avatar)',
+      type: 'checkbox',
+      checked: Boolean(state.lowPower),
+      click: () => actions.setLowPower(!state.lowPower)
+    },
     { type: 'separator' },
     { label: 'Settings…', click: () => actions.openSettings() },
     { label: 'Stop task', enabled: Boolean(state.connected), click: () => actions.stopTask() },

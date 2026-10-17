@@ -469,6 +469,12 @@ class WebSocketServer:
 
         elif event_type == "persona.change":
             formatted = {"type": "persona_change", "persona": str(data.get("persona", "")), "timestamp": ts}
+            ch = data.get("character")
+            if isinstance(ch, dict):
+                formatted["character"] = {
+                    k: (str(ch[k])[:1024] if ch.get(k) is not None else None)
+                    for k in ("id", "display_name", "renderer", "asset", "voice", "theme", "framing") if k in ch
+                }
 
         elif event_type == "mic.mute":
             formatted = {"type": "mic_mute", "muted": bool(data.get("muted")), "timestamp": ts}
@@ -496,6 +502,11 @@ class WebSocketServer:
 
         elif event_type == "assistant.reply":
             formatted = {"type": "reply", "text": truncate_text(str(data.get("text", "")), 1000), "timestamp": ts}
+
+        elif event_type == "assistant.emotion":
+            emo = str(data.get("emotion", "")).lower()
+            if emo in ("happy", "angry", "sad", "surprised", "relaxed", "neutral"):
+                formatted = {"type": "emotion", "emotion": emo, "timestamp": ts}
 
         elif event_type == "screen.highlight":
             try:

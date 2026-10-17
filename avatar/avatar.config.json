@@ -44,5 +44,11 @@
     "autostart": true,
     "python": null,
     "shutdown_timeout_ms": 5000
+  },
+  "render": {
+    "fps_cap": 30,
+    "pixel_ratio_cap": 1.25,
+    "antialias": false,
+    "look_at": true
   }
 }
