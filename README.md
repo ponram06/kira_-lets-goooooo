@@ -530,7 +530,7 @@ The model can write a short Python script; Kira saves it as `workspace/scripts/<
 - **Runtime limits**: isolated `python -I` subprocess, working directory `workspace/scripts/`, an environment with no API keys or PIN, timeout, output cap and a memory cap with child processes blocked (Windows Job Object). The kill switch stops a running script. Limits live in `config.yaml` under `scripts:`.
 - **⚠ The static checks are NOT a full sandbox.** Python is dynamic and a determined script can get around AST rules. For code you do not trust set `scripts.sandbox` to `docker` (no network, memory cap, read-only mount; needs Docker Desktop) or `windows_sandbox` (needs the Windows Sandbox feature, Pro/Enterprise editions). If the chosen sandbox is missing, Kira refuses to run the script instead of running it unsandboxed.
 
-Test: `.venvScriptspython.exe -m pytest -q tests	est_script_runner.py`
+Test: `.venv\Scripts\python.exe -m pytest -q tests\test_script_runner.py`
 
 ### Avatar Chat Box (Fallback Input)
 
