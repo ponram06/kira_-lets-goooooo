@@ -99,16 +99,16 @@ python -m backend.brain
 Kira operates in **Restricted mode** by default.
 
 #### Voice Controls
-* **Push-to-Talk (PTT)**: Hold **`F9`** (configurable in `config.yaml`) to speak. Release to transcribe and send.
+* **Push-to-Talk (PTT)**: Hold **`` ` ``** (backtick, configurable in `config.yaml`) to speak. Release to transcribe and send.
 * **Global Emergency Kill Hotkey**: Press **`Ctrl+Alt+K`** at any time to instantly halt all audio playback, tool execution, and active loops. Operates globally even if speech recognition is down.
 * **Stop Word**: Saying **`"stop"`** or **`"Kira stop"`** immediately halts speech and activates the kill switch locally before sending to the LLM.
 * **Mode Commands by Voice**:
-  * Saying `"restricted mode"` immediately switches to Restricted mode.
-  * Saying `"free mode"` by voice is **blocked by policy**; Kira instructs you to type it explicitly in the terminal.
+  * Saying `"restricted mode"` immediately switches to Restricted mode (Apple turns **green**).
+  * Saying `"go to free mode"` or `"free mode"` prompts for the security PIN (`1684`). Speak or type `1684` to enter Free mode (Apple turns **red**).
 
 #### Built-in Terminal Commands
-* `restricted mode` — Switch immediately to Restricted mode.
-* `free mode` — Request switch to Free mode (prompts for confirmation; auto-reverts after timeout).
+* `restricted mode` — Switch immediately to Restricted mode (Apple glow is green).
+* `free mode` — Prompt for the security PIN (`1684`) to switch to Free mode (Apple glow is red; auto-reverts after timeout).
 * `stop` — Activate the global **Kill Switch** (blocks all tool actions and audio instantly).
 * `resume` / `reset` — Reset the Kill Switch.
 * `exit` or `quit` — Close the REPL.
@@ -164,17 +164,18 @@ To manually verify the complete voice pipeline on Windows:
 2. **Verify**: Audio halts immediately and terminal prints:
    `[EMERGENCY KILL SWITCH: Ctrl+Alt+K pressed. All actions and audio halted.]`
 
-### Test 4: Voice Free Mode Refusal
-1. Hold **`F8`** and say: `"free mode"`.
-2. **Verify**: Kira refuses via speech and terminal:
-   `"Free mode cannot be enabled by voice. Please type 'free mode' in the terminal."`
-   Mode remains `RESTRICTED`.
+### Test 4: Voice Free Mode & PIN Protection
+1. Hold **`` ` ``** and say: `"go to free mode"`.
+2. **Verify**: Kira prompts for the PIN out loud and on screen: `"Please enter the PIN to enable Free mode."`.
+3. Hold **`` ` ``** and say `"one six eight four"` (or type `1684` in the terminal).
+4. **Verify**: Kira announces `"PIN verified. Switched to Free mode."`, the Ryuk avatar's apple turns **crimson red**, and Free mode activates (with a 600s auto-revert timer).
+5. Say or type `"restricted mode"`. Kira switches back immediately and the avatar's apple turns **emerald green**.
 
-### Test 5: Spoken Read-Back & Confirmation
-1. Ask Kira to perform an action outside allowlist requiring confirmation.
-2. **Verify**: Kira reads back the confirmation request out loud. The 10-second timer starts after speech finishes.
-3. Hold **`F8`** and say: `"yes"`.
-4. **Verify**: The action is approved and proceeds.
+### Test 5: Non-blocking Spoken Read-Back & Confirmation
+1. Ask Kira to perform an action outside allowlist requiring confirmation (e.g., delete a file).
+2. **Verify**: Kira reads back the confirmation request out loud. The 10-second timer begins strictly after speech finishes without freezing the terminal.
+3. Hold **`` ` ``** and say: `"yes"` (or type `yes` in the terminal).
+4. **Verify**: The action is approved and proceeds immediately without timing out.
 
 ---
 
